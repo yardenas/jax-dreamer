@@ -81,11 +81,10 @@ class RSSM(hk.Module):
         state = initial_state
         keys = hk.next_rng_keys(self.c.imag_horizon)
         for t, key in enumerate(keys):
-            sample_key, apply_key = jax.random.split(key)
             action = policy.apply(policy_params,
-                                  apply_key,
+                                  key,
                                   jax.lax.stop_gradient(vec(state))
-                                  ).sample(seed=sample_key)
+                                  ).sample(seed=key)
             _, state = self.prior(state, action)
             sequence = sequence.at[:, t].set(vec(state))
         return sequence
