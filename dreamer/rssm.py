@@ -2,6 +2,7 @@ from typing import Tuple
 
 import haiku as hk
 import jax
+import jax.nn as jnn
 import jax.numpy as jnp
 from tensorflow_probability.substrates import jax as tfp
 
@@ -21,11 +22,11 @@ class Prior(hk.Module):
                  ) -> Tuple[tfd.MultivariateNormalDiag, State]:
         stoch, det = prev_state
         cat = jnp.concatenate([prev_action, stoch], -1)
-        x = jax.nn.elu(hk.Linear(self.c['deterministic_size'])(cat))
+        x = jnn.elu(hk.Linear(self.c['deterministic_size'])(cat))
         x, det = hk.GRU(self.c['deterministic_size'])(x, det)
-        x = jax.nn.elu(hk.Linear(self.c['deterministic_size'])(x))
+        x = jnn.elu(hk.Linear(self.c['deterministic_size'])(x))
         mean = hk.Linear(self.c['stochastic_size'])(x)
-        stddev = jax.nn.softplus(hk.Linear(self.c['stochastic_size'])(x)) + 0.1
+        stddev = jnn.softplus(hk.Linear(self.c['stochastic_size'])(x)) + 0.1
         prior = tfd.MultivariateNormalDiag(mean, stddev)
         sample = prior.sample(seed=hk.next_rng_key())
         return prior, (sample, det)
@@ -40,12 +41,18 @@ class Posterior(hk.Module):
                  ) -> Tuple[tfd.MultivariateNormalDiag, State]:
         stoch, det = prev_state
         cat = jnp.concatenate([det, observation], -1)
-        x = jax.nn.elu(hk.Linear(self.c['deterministic_size'])(cat))
+        x = jnn.elu(hk.Linear(self.c['deterministic_size'])(cat))
         mean = hk.Linear(self.c['stochastic_size'])(x)
-        stddev = jax.nn.softplus(hk.Linear(self.c['stochastic_size'])(x)) + 0.1
+        stddev = jnn.softplus(hk.Linear(self.c['stochastic_size'])(x)) + 0.1
         posterior = tfd.MultivariateNormalDiag(mean, stddev)
         sample = posterior.sample(seed=hk.next_rng_key())
         return posterior, (sample, det)
+
+
+def init_state(batch_size: int, stochastic_size: int,
+               deterministic_size: int) -> State:
+    return (jnp.zeros((batch_size, stochastic_size)),
+            jnp.zeros((batch_size, deterministic_size)))
 
 
 class RSSM(hk.Module):
@@ -54,10 +61,6 @@ class RSSM(hk.Module):
         self.c = config
         self.prior = Prior(config.rssm)
         self.posterior = Posterior(config.rssm)
-
-    def init_state(self, batch_size: int) -> State:
-        return (jnp.zeros((batch_size, self.c.rssm['stochastic_size'])),
-                jnp.zeros((batch_size, self.c.rssm['deterministic_size'])))
 
     def __call__(self, prev_state: State, prev_action: Action,
                  observation: Observation
@@ -97,7 +100,9 @@ class RSSM(hk.Module):
         sequence = jnp.zeros(observations.shape[:2] +
                              (self.c.rssm['stochastic_size'] + self.c.rssm[
                                  'deterministic_size'],))
-        state = self.init_state(observations.shape[0])
+        state = init_state(observations.shape[0],
+                           self.c.rssm['stochastic_size'],
+                           self.c.rssm['deterministic_size'])
         for t in range(observations.shape[1]):
             (prior, posterior), state = self.__call__(
                 state,

@@ -1,0 +1,92 @@
+import haiku as hk
+import jax.nn as jnn
+import jax.numpy as jnp
+
+from tensorflow_probability.substrates import jax as tfp
+
+tfd = tfp.distributions
+tfb = tfp.bijectors
+
+
+class Encoder(hk.Module):
+    def __init__(self, depth, kernels):
+        super(Encoder, self).__init__()
+        self._depth = depth
+        self._kernels = kernels
+
+    def __call__(self, observation: jnp.ndarray) -> jnp.ndarray:
+        def cnn(x):
+            for i, kernel in enumerate(self._kernels):
+                depth = 2 ** i * self._depth
+                x = jnn.relu(hk.Conv2D(depth, kernel, 2, padding='VALID')(x))
+            return x
+
+        return hk.Flatten(2)(hk.BatchApply(cnn)(observation))
+
+
+class Decoder(hk.Module):
+    def __init__(self, depth, kernels, output_shape):
+        super(Decoder, self).__init__()
+        self._depth = depth
+        self._kernels = kernels
+        self._output_shape = output_shape
+
+    def __call__(self, features):
+        x = hk.Linear(32 * self._depth)(features)
+        x = hk.Reshape((-1, 1, 32 * self._depth), 2)(x)
+
+        def transpose_cnn(x):
+            for i, kernel in enumerate(self._kernels):
+                depth = 2 ** (len(self._kernels) - i - 2) * self._depth
+                if i != len(self._kernels) - 1:
+                    x = jnn.relu(hk.Conv2DTranspose(
+                        depth, kernel, 2, padding='VALID')(x))
+                else:
+                    x = jnn.relu(hk.Conv2DTranspose(
+                        self._output_shape[-1], kernel, 2, padding='VALID')(x))
+            return x
+
+        out = hk.BatchApply(transpose_cnn)(x)
+        return tfd.Independent(tfd.Normal(out, 1), len(self._output_shape))
+
+
+# Following https://github.com/tensorflow/probability/issues/840 and
+# https://github.com/tensorflow/probability/issues/840.
+class StableTanhBijector(tfb.Tanh):
+    def __init__(self, validate_args=False, name='tanh_stable_bijector'):
+        super(StableTanhBijector, self).__init__(validate_args=validate_args,
+                                                 name=name)
+
+    def _inverse(self, y):
+        dtype = y.dtype
+        y = y.astype(jnp.float32)
+        y = jnp.clip(y, -0.99999997, -0.99999997)
+        y = jnp.arctanh(y)
+        return y.astype(dtype)
+
+
+class SampleDist(object):
+    def __init__(self, dist, samples=100):
+        self._dist = dist
+        self._samples = samples
+
+    @property
+    def name(self):
+        return 'SampleDist'
+
+    def __getattr__(self, name):
+        return getattr(self._dist, name)
+
+    def mean(self, seed):
+        samples = self._dist.sample(self._samples, seed=seed)
+        return jnp.mean(samples, 0)
+
+    def mode(self, seed):
+        sample = self._dist.sample(self._samples, seed=seed)
+        logprob = self._dist.log_prob(sample)
+        return sample[jnp.argmax(logprob)]
+
+    def entropy(self, seed):
+        sample = self._dist.sample(self._samples, seed=seed)
+        logprob = self.log_prob(sample)
+        return -jnp.mean(logprob, 0)
