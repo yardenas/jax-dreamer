@@ -26,8 +26,6 @@ def interact(env, episodes, episode_length, buffer):
 
 
 class TestReplayBuffer(unittest.TestCase):
-    def test_batch_size(self):
-        pass
 
     def test_store(self):
         env = gym.make('Pendulum-v1')
@@ -43,3 +41,17 @@ class TestReplayBuffer(unittest.TestCase):
         self.assertEqual(buffer._episdoe_lengths[2], episode_length)
         self.assertEqual(buffer._episdoe_lengths[-2], 0)
         self.assertEqual(buffer._episdoe_lengths[-1], 0)
+
+    def test_sample(self):
+        from jax.config import config as jax_config
+        jax_config.update('jax_disable_jit', True)
+        env = gym.make('Pendulum-v1')
+        episode_length = 10
+        episodes = 3
+        capacity = 5
+        buffer = ReplayBuffer(capacity, episode_length, env.observation_space,
+                              env.action_space, 2, jax.random.PRNGKey(42))
+        interact(env, episodes, episode_length, buffer)
+        sample = next(buffer.sample(1, 4))
+        self.assertEqual(sample['observation'].shape[0], 2)
+        self.assertEqual(sample['observation'].shape[1], 4)
