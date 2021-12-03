@@ -1,6 +1,5 @@
-from typing import Mapping, Tuple, Union
-
 import functools
+from typing import Mapping, Union
 
 import haiku as hk
 import jax
@@ -66,10 +65,9 @@ class ReplayBuffer(object):
             length: int, episode_lengths: jnp.ndarray
     ) -> Batch:
         # Algorithm:
-        # 1. Sample episodes by weighting their length, filter too short
-        # episodes.
-        # 2. Collect sequences from episodes.
-        # 3. Repeat 1-2 until `batch size` of sequences is gathered.
+        # 1. Filter too short episodes.
+        # 2. Sample episodes by weighting their length.
+        # 3. Collect sequences from episodes.
 
         def sample_episode_ids(key: jnp.ndarray,
                                episode_lengths: jnp.ndarray, length: int):
@@ -83,19 +81,12 @@ class ReplayBuffer(object):
         def sample_sequence(key: jnp.ndarray,
                             episode_data: Mapping[str, jnp.ndarray],
                             episode_length: jnp.ndarray,
-                            sequence_length: int) -> Tuple[jnp.ndarray, ...]:
+                            sequence_length: int) -> Mapping[str, jnp.ndarray]:
             start = jax.random.randint(
-                key, (1,), 0, episode_length - sequence_length + 1)
-
-            # https: // github.com / google / jax / issues / 5186 and
-            # https://github.com/google/jax/issues/101
-            # That's the best work-around I could find for dynamic slices
-            # (with a static size, but dynamic starting point)
-            funky_arange = lambda start, size: start + jnp.cumsum(
-                jnp.ones((size,), jnp.int32))
-
+                key, (), 0, episode_length - sequence_length + 1)
             return jax.tree_map(
-                lambda x: x[funky_arange(start, sequence_length)],
+                lambda x: jax.lax.dynamic_slice(x, (start, 0),
+                                                (length, x.shape[-1])),
                 episode_data)
 
         key, ids_key = jax.random.split(key)
@@ -111,8 +102,7 @@ class ReplayBuffer(object):
             sampled_episods,
             episode_lengths[idxs],
             length)
-        # observation, action, reward, terminal = map(jnp.stack, zip(*episodes))
-        return dict()
+        return sampled_sequences
 
 
 def __len__(self):
