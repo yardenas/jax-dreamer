@@ -97,7 +97,7 @@ class RSSM(hk.Module):
                                           tfd.MultivariateNormalDiag],
                                     jnp.ndarray]:
         priors, posteriors = [], []
-        sequence = jnp.zeros(observations.shape[:2] +
+        features = jnp.zeros(observations.shape[:2] +
                              (self.c.rssm['stochastic_size'] + self.c.rssm[
                                  'deterministic_size'],))
         state = init_state(observations.shape[0],
@@ -111,7 +111,7 @@ class RSSM(hk.Module):
             )
             priors.append((prior.mean(), prior.stddev()))
             posteriors.append((posterior.mean(), posterior.stddev()))
-            sequence = sequence.at[:, t].set(jnp.concatenate(state, -1))
+            features = features.at[:, t].set(jnp.concatenate(state, -1))
 
         def joint_mvn(dists):
             mvn = tfd.MultivariateNormalDiag(*zip(*dists))
@@ -119,4 +119,4 @@ class RSSM(hk.Module):
 
         prior = joint_mvn(priors)
         posterior = joint_mvn(posteriors)
-        return (prior, posterior), sequence
+        return (prior, posterior), features
