@@ -14,8 +14,11 @@ from tensorflow_probability.substrates import jax as tfp
 import dreamer.utils as utils
 from dreamer.logger import TrainingLogger
 from dreamer.replay_buffer import ReplayBuffer
+from dreamer.rssm import init_state
 
 PRNGKey = jnp.ndarray
+State = Tuple[jnp.ndarray, jnp.ndarray]
+Action = jnp.ndarray
 Observation = np.ndarray
 Batch = Mapping[str, np.ndarray]
 tfd = tfp.distributions
@@ -45,6 +48,7 @@ class Dreamer:
                                     observation_space.sample()[None, None])
         self.experience = experience
         self.logger = logger
+        self.state = (self.init_state, jnp.zeros(action_space.shape))
         self.c = config
         self.training_step = 0
         self._prefill_policy = action_space.sample
@@ -56,21 +60,44 @@ class Dreamer:
             self.update()
         if self.time_to_log and training:
             self.logger.log_metrics(self.training_step)
-        action = self.policy(observation, self.actor.params,
-                             next(self.rng_seq), training)
+        action, current_state = self.policy(
+            self.state[0], self.state[1], observation, self.model.params,
+            self.actor.params, next(self.rng_seq), training)
+        self.state = (current_state, action)
         return np.clip(action, -1.0, 1.0)
 
-    @functools.partial(jax.jit, static_argnums=(0, 4))
-    def policy(self, observation: Observation, params: hk.Params,
-               rng_key: PRNGKey, training=True) -> jnp.ndarray:
-        policy = self.actor.apply(params, observation)
-        action = policy.sample(seed=rng_key) if training else policy.mode(
-            seed=rng_key)
-        return action
+    @functools.partial(jax.jit, static_argnums=(0, 7))
+    def policy(
+            self,
+            prev_state: State,
+            prev_action: Action,
+            observation: Observation,
+            model_params: hk.Params,
+            actor_params: hk.Params,
+            key: PRNGKey,
+            training=True
+    ) -> Tuple[jnp.ndarray, State]:
+        filter_, *_ = self.model.apply
+        key, subkey = jax.random.split(key)
+        _, current_state = filter_(model_params, key, prev_state, prev_action,
+                                   observation)
+        features = jnp.concatenate(current_state, -1)
+        policy = self.actor.apply(actor_params, features)
+        action = policy.sample(seed=key) if training else policy.mode(
+            seed=key)
+        return action, current_state
 
     def observe(self, transition):
         self.training_step += 1
         self.experience.store(transition)
+        if transition['terminal'] or transition['info'].get(
+                'TimeLimit.truncated', False):
+            self.state = (self.init_state, jnp.zeros_like(self.state[-1]))
+
+    @property
+    def init_state(self):
+        return init_state(1, self.c.rssm['stochastic_size'],
+                          self.c.rss['deterministic_size'])
 
     def update(self):
         (self.model.params, self.model.opt_state,
@@ -160,7 +187,7 @@ class Dreamer:
             key: PRNGKey
     ) -> Tuple[hk.Params, dict, Tuple[jnp.ndarray, jnp.ndarray]]:
         _, generate_experience, *_ = self.model.apply
-        policy = self.actor.model
+        policy = self.actor
         critic = self.critic.apply
         discount = jnp.cumprod(
             self.c.discount * jnp.ones((self.c.imag_horizon - 1,))
@@ -196,11 +223,15 @@ class Dreamer:
             opt_state: optax.OptState,
             lambda_values: jnp.ndarray
     ) -> Tuple[hk.Params, dict]:
+        discount = jnp.cumprod(
+            self.c.discount * jnp.ones((self.c.imag_horizon - 1,))
+        )
+        discount = jnp.concatenate(jnp.ones(()), discount)
 
         def loss(params: hk.Params) -> float:
             values = self.critic.apply(params, features)
             targets = jax.lax.stop_gradient(lambda_values)
-            return -values.log_prob(targets).mean()
+            return -values.log_prob(targets * discount).mean()
 
         (loss_, grads) = jax.value_and_grad(loss)(params)
         updates, new_opt_state = self.critic.optimizer.update(grads, opt_state)
