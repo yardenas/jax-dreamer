@@ -2,6 +2,7 @@ import functools
 from typing import Mapping, Union
 
 import jax
+import jax.nn as jnn
 import jax.numpy as jnp
 import numpy as np
 from gym.spaces import Space
@@ -68,13 +69,11 @@ class ReplayBuffer:
         # 3. Sample and collect sequences from episodes.
 
         def sample_episode_ids(key: jnp.ndarray, episode_lengths: jnp.ndarray):
-            out = jnp.where(episode_lengths >= self._length, 1, 0
-                            ).astype(jnp.uint32)
-            num_episodes = out.sum()
-            logits = episode_lengths[:num_episodes].astype(jnp.float32)
-            sample = jax.random.categorical(
-                key, logits,
-                shape=(self._batch_size,))
+            valid_ids = jnp.argwhere(episode_lengths >= self._length
+                                     ).squeeze(-1)
+            sample = jax.random.choice(
+                key, valid_ids, (self._batch_size,),
+                p=jnn.softmax(episode_lengths[valid_ids]))
             return sample
 
         def sample_sequence(key: jnp.ndarray,
