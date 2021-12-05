@@ -1,7 +1,6 @@
 import functools
 from typing import Mapping, Union
 
-import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -21,17 +20,21 @@ class ReplayBuffer:
             batch_size: int,
             length: int
     ):
+        device = jax.devices()[0] if (
+                len(jax.devices()) < 2) else jax.devices("cpu")[0]
         self.data = {
-            'observation': jnp.full(
+            'observation': jax.device_put(jnp.full(
                 (capacity, max_episode_length + 1) + observation_space.shape,
-                jnp.nan, jnp.float32),
-            'action': jnp.full(
+                jnp.nan, jnp.float32), device),
+            'action': jax.device_put(jnp.full(
                 (capacity, max_episode_length) + action_space.shape,
-                jnp.nan, jnp.float32),
-            'reward': jnp.full((capacity, max_episode_length) + (1,),
-                               jnp.nan, jnp.float32),
-            'terminal': jnp.full((capacity, max_episode_length) + (1,),
-                                 jnp.nan, jnp.bool_)
+                jnp.nan, jnp.float32), device),
+            'reward': jax.device_put(
+                jnp.full((capacity, max_episode_length) + (1,),
+                         jnp.nan, jnp.float32), device),
+            'terminal': jax.device_put(
+                jnp.full((capacity, max_episode_length) + (1,),
+                         jnp.nan, jnp.bool_), device)
         }
         self.episdoe_lengths = jnp.full((capacity,), 0, dtype=jnp.uint32)
         self.idx = 0
@@ -98,7 +101,7 @@ class ReplayBuffer:
             sequence_keys,
             sampled_episods,
             episode_lengths[idxs])
-        return sampled_sequences
+        return jax.device_put(sampled_sequences, jax.devices()[0])
 
     def __len__(self):
         return self.episdoe_lengths.sum()
