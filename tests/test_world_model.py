@@ -14,7 +14,7 @@ tfd = tfp.distributions
 
 class Config(NamedTuple):
     rssm = {'deterministic_size': 32, 'stochastic_size': 4}
-    imag_horizon = 15
+    imag_horizon = 12
     encoder = {'depth': 32, 'kernels': (4, 4, 4, 4)}
     decoder = {'depth': 32, 'kernels': (5, 5, 6, 6)}
     reward = {'output_sizes': (400, 400, 400, 400)}
@@ -88,21 +88,31 @@ class TestWorldModel(unittest.TestCase):
     def test_generate(self):
         _, generate, *_ = f.MODEL.apply
         f.SEED, subkey = jax.random.split(f.SEED)
-        output = generate(f.PARAMS, subkey,
-                          f.DUMMY_STATE,
-                          f.POLICY,
-                          f.POLICY_PARAMS)
-        self.assertEqual(output.shape, (3, 5, 36))
+        features, reward, terminal = generate(f.PARAMS, subkey,
+                                              f.DUMMY_STATE,
+                                              f.POLICY,
+                                              f.POLICY_PARAMS)
+        self.assertEqual(features.shape, (3, CONFIG.imag_horizon, 36))
+        self.assertEqual(reward.event_shape, ())
+        self.assertEqual(tuple(reward.batch_shape), (3, CONFIG.imag_horizon))
+        self.assertEqual(terminal.event_shape, ())
+        self.assertEqual(tuple(terminal.batch_shape), (3, CONFIG.imag_horizon))
 
     def test_infer(self):
         _, _, infer, _ = f.MODEL.apply
         f.SEED, subkey = jax.random.split(f.SEED)
-        outputs_infer = infer.apply(f.PARAMS, subkey,
-                                    f.DUMMY_OBSERVATIONS,
-                                    f.DUMMY_ACTIONS)
-        (prior, posterior), outs = outputs_infer
+        outputs_infer = infer(f.PARAMS, subkey,
+                              f.DUMMY_OBSERVATIONS,
+                              f.DUMMY_ACTIONS)
+        (prior, posterior), features, decoded, reward, terminal = outputs_infer
         self.assertEqual(prior.event_shape, (4,))
         self.assertEqual(prior.batch_shape, (3, 15))
         self.assertEqual(prior.event_shape, posterior.event_shape)
         self.assertEqual(prior.batch_shape, posterior.batch_shape)
-        self.assertEqual(outs.shape, (3, 15, 36))
+        self.assertEqual(features.shape, (3, 15, 36))
+        self.assertEqual(reward.event_shape, ())
+        self.assertEqual(tuple(reward.batch_shape), (3, 15))
+        self.assertEqual(terminal.event_shape, ())
+        self.assertEqual(tuple(terminal.batch_shape), (3, 15))
+        self.assertEqual(decoded.event_shape, (64, 64, 3))
+        self.assertEqual(tuple(decoded.batch_shape), (3, 15))

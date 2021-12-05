@@ -1,5 +1,5 @@
 import functools
-from typing import Mapping, Union
+from typing import Mapping, Union, List
 
 import haiku as hk
 import jax
@@ -53,29 +53,44 @@ class ReplayBuffer(object):
             self.idx = int((self.idx + 1) % self.capacity)
 
     def sample(self, samples: int, length: int):
-        for _ in range(samples):
-            yield self._sample(next(self.rng_seq), self.data,
-                               length, self._episdoe_lengths)
+        batches = self._sample(next(self.rng_seq), self.data,
+                               length, self._episdoe_lengths, samples)
+        yield from batches
 
-    @functools.partial(jax.jit, static_argnums=(0,))
+    # @functools.partial(jax.jit, static_argnums=(0, 1, 2))
+    # def _sample(self, samples: int,
+    #             data: Mapping[str, jnp.ndarray],
+    #             length: int,
+    #             episode_lengths: jnp.ndarray) -> List[Batch]:
+    #     batches = []
+    #     for key, _ in zip(self.rng_seq.take(samples), range(samples)):
+    #         batches.append(self._sample_batch(key, data, length,
+    #                                           episode_lengths))
+    #     return batches
+    @functools.partial(jax.jit, static_argnums=(0, 3, 5))
     def _sample(
             self,
             key: jnp.ndarray,
             data: Mapping[str, jnp.ndarray],
-            length: int, episode_lengths: jnp.ndarray
-    ) -> Batch:
+            length: int,
+            episode_lengths: jnp.ndarray,
+            samples: int
+    ) -> List[Batch]:
         # Algorithm:
         # 1. Filter too short episodes.
         # 2. Sample episodes by weighting their length.
-        # 3. Collect sequences from episodes.
+        # 3. Sample and collect sequences from episodes.
 
         def sample_episode_ids(key: jnp.ndarray,
-                               episode_lengths: jnp.ndarray, length: int):
+                               episode_lengths: jnp.ndarray,
+                               length: int,
+                               samples: int):
             out = jnp.where(episode_lengths >= length, 1, 0).astype(jnp.uint32)
             num_episodes = out.sum()
             logits = episode_lengths[:num_episodes].astype(jnp.float32)
-            sample = jax.random.categorical(key, logits,
-                                            shape=(self._batch_size,))
+            sample = jax.random.categorical(
+                key, logits,
+                shape=(self._batch_size * samples,))
             return sample
 
         def sample_sequence(key: jnp.ndarray,
@@ -85,8 +100,8 @@ class ReplayBuffer(object):
             start = jax.random.randint(
                 key, (), 0, episode_length - sequence_length + 1)
             return jax.tree_map(
-                lambda x: jax.lax.dynamic_slice(x, (start, 0),
-                                                (length, x.shape[-1])),
+                lambda x: jax.lax.dynamic_slice(
+                    x, (start, 0), (length, x.shape[-1])),
                 episode_data)
 
         key, ids_key = jax.random.split(key)
@@ -94,15 +109,17 @@ class ReplayBuffer(object):
         # long enough.
         idxs: jnp.ndarray = sample_episode_ids(ids_key,
                                                episode_lengths,
-                                               length)
+                                               length,
+                                               samples)
         sampled_episods = jax.tree_map(lambda x: x[idxs], data)
-        sequence_keys = jax.random.split(key, self._batch_size + 1)[1:]
+        sequence_keys = jax.random.split(
+            key, self._batch_size * samples + 1)[1:]
         sampled_sequences = jax.vmap(sample_sequence, (0, 0, 0, None))(
             sequence_keys,
             sampled_episods,
             episode_lengths[idxs],
             length)
-        return sampled_sequences
+        return jax.tree_map(lambda x: jnp.split(x, samples), sampled_sequences)
 
 
 def __len__(self):
