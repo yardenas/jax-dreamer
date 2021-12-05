@@ -68,7 +68,7 @@ class DenseDecoder(hk.Module):
             normal=lambda mu: tfd.Normal(mu, 1.0),
             bernoulli=lambda p: tfd.Bernoulli(p, dtype=jnp.float32)
         )[self._dist]
-        return tfd.Independent(dist(x), 0)
+            return tfd.Independent(dist(x), 0)
 
 
 # Following https://github.com/tensorflow/probability/issues/840 and

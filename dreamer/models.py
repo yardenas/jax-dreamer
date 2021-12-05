@@ -1,7 +1,6 @@
 from typing import Tuple
 
 import haiku as hk
-import jax
 import jax.nn as jnn
 import jax.numpy as jnp
 from tensorflow_probability.substrates import jax as tfp
@@ -10,7 +9,6 @@ import dreamer.blocks as b
 from dreamer.rssm import RSSM, State, Action, Observation
 
 tfd = tfp.distributions
-tfb = tfp.bijectors
 
 
 class WorldModel(hk.Module):
@@ -76,7 +74,7 @@ class Actor(hk.Module):
         self._min_stddev = min_stddev
 
     def __call__(self, observation):
-        mlp = hk.nets.MLP(self.output_sizes)
+        mlp = hk.nets.MLP(self.output_sizes, activation=jnn.elu)
         mu, stddev = jnp.split(mlp(observation), 2, -1)
         stddev = jnn.softplus(stddev) + self._min_stddev
         multivariate_normal_diag = tfd.MultivariateNormalDiag(
@@ -89,20 +87,3 @@ class Actor(hk.Module):
             b.StableTanhBijector()
         )
         return b.SampleDist(squashed)
-
-
-class DoubleCritic(hk.Module):
-    def __init__(self, output_sizes):
-        super().__init__()
-        self.output_sizes = output_sizes
-
-    def __call__(self, observation, action):
-        x = jnp.concatenate([observation, action], -1)
-        mlp1 = hk.nets.MLP(self.output_sizes)
-        mlp2 = hk.nets.MLP(self.output_sizes)
-
-        def to_dist(q_fn):
-            mu = jnp.squeeze(q_fn(x), -1)
-            return tfd.Normal(loc=mu, scale=1.0)
-
-        return jax.tree_map(to_dist, [mlp1, mlp2])

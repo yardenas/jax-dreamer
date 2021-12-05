@@ -11,7 +11,7 @@ Transition = Mapping[str, Union[np.ndarray, dict]]
 Batch = Mapping[str, jnp.ndarray]
 
 
-class ReplayBuffer(object):
+class ReplayBuffer:
     def __init__(
             self,
             capacity: int,
