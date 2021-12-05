@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Sequence
 
 import haiku as hk
 import jax.nn as jnn
@@ -68,7 +68,7 @@ class WorldModel(hk.Module):
 
 
 class Actor(hk.Module):
-    def __init__(self, output_sizes, min_stddev):
+    def __init__(self, output_sizes: Sequence[int], min_stddev):
         super().__init__()
         self.output_sizes = output_sizes
         self._min_stddev = min_stddev

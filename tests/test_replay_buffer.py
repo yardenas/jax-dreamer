@@ -33,7 +33,7 @@ class TestReplayBuffer(unittest.TestCase):
         episodes = 3
         capacity = 5
         buffer = ReplayBuffer(capacity, episode_length, env.observation_space,
-                              env.action_space, 2, jax.random.PRNGKey(42))
+                              env.action_space, 2, 4)
         interact(env, episodes, episode_length, buffer)
         self.assertEqual(buffer.idx, episodes)
         self.assertEqual(buffer.episdoe_lengths[0], episode_length)
@@ -50,9 +50,9 @@ class TestReplayBuffer(unittest.TestCase):
         episodes = 3
         capacity = 5
         buffer = ReplayBuffer(capacity, episode_length, env.observation_space,
-                              env.action_space, 2, jax.random.PRNGKey(42))
+                              env.action_space, 2, 4)
         interact(env, episodes, episode_length, buffer)
         key = jax.random.PRNGKey(43)
-        sample = buffer.sample(key, buffer.data, 4, buffer.episdoe_lengths)
+        sample = buffer.sample(key, buffer.data, buffer.episdoe_lengths)
         self.assertEqual(sample['observation'].shape[0], 2)
         self.assertEqual(sample['observation'].shape[1], 4)

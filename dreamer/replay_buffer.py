@@ -19,7 +19,7 @@ class ReplayBuffer:
             observation_space: Space,
             action_space: Space,
             batch_size: int,
-            seed: jnp.ndarray
+            length: int
     ):
         self.data = {
             'observation': jnp.full(
@@ -36,8 +36,8 @@ class ReplayBuffer:
         self.episdoe_lengths = jnp.full((capacity,), 0, dtype=jnp.uint32)
         self.idx = 0
         self.capacity = capacity
-        self.rng_seq = hk.PRNGSequence(seed)
         self._batch_size = batch_size
+        self._length = length
 
     def store(self, transition: Transition):
         position = self.episdoe_lengths[self.idx]
@@ -52,12 +52,11 @@ class ReplayBuffer:
                     transition['next_observation'])
             self.idx = int((self.idx + 1) % self.capacity)
 
-    @functools.partial(jax.jit, static_argnums=(0, 3))
+    @functools.partial(jax.jit, static_argnums=0)
     def sample(
             self,
             key: jnp.ndarray,
             data: Mapping[str, jnp.ndarray],
-            length: int,
             episode_lengths: jnp.ndarray
     ) -> Batch:
         # Algorithm:
@@ -66,9 +65,9 @@ class ReplayBuffer:
         # 3. Sample and collect sequences from episodes.
 
         def sample_episode_ids(key: jnp.ndarray,
-                               episode_lengths: jnp.ndarray,
-                               length: int):
-            out = jnp.where(episode_lengths >= length, 1, 0).astype(jnp.uint32)
+                               episode_lengths: jnp.ndarray):
+            out = jnp.where(episode_lengths >= self._length, 1, 0
+                            ).astype(jnp.uint32)
             num_episodes = out.sum()
             logits = episode_lengths[:num_episodes].astype(jnp.float32)
             sample = jax.random.categorical(
@@ -78,29 +77,27 @@ class ReplayBuffer:
 
         def sample_sequence(key: jnp.ndarray,
                             episode_data: Mapping[str, jnp.ndarray],
-                            episode_length: jnp.ndarray,
-                            sequence_length: int) -> Mapping[str, jnp.ndarray]:
+                            episode_length: jnp.ndarray
+                            ) -> Mapping[str, jnp.ndarray]:
             start = jax.random.randint(
-                key, (), 0, episode_length - sequence_length + 1)
+                key, (), 0, episode_length - self._length + 1)
             return jax.tree_map(
                 lambda x: jax.lax.dynamic_slice(
-                    x, (start, 0), (length, x.shape[-1])),
+                    x, (start, 0), (self._length, x.shape[-1])),
                 episode_data)
 
         key, ids_key = jax.random.split(key)
         # Sample uniformly across observations within all episodes which are
         # long enough.
         idxs: jnp.ndarray = sample_episode_ids(ids_key,
-                                               episode_lengths,
-                                               length)
+                                               episode_lengths)
         sampled_episods = jax.tree_map(lambda x: x[idxs], data)
         sequence_keys = jax.random.split(
             key, self._batch_size + 1)[1:]
-        sampled_sequences = jax.vmap(sample_sequence, (0, 0, 0, None))(
+        sampled_sequences = jax.vmap(sample_sequence, (0, 0, 0))(
             sequence_keys,
             sampled_episods,
-            episode_lengths[idxs],
-            length)
+            episode_lengths[idxs])
         return sampled_sequences
 
     def __len__(self):

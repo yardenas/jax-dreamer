@@ -10,7 +10,7 @@ PRNGKey = jnp.ndarray
 class Learner:
     def __init__(
             self,
-            model: hk.Transformed,
+            model: Union[hk.Transformed, hk.MultiTransformed],
             seed: PRNGKey,
             optimizer_config: dict,
             *input_example: Tuple
@@ -43,3 +43,7 @@ def compute_lambda_values(
         v_lambda = td + v_lambda * lambda_ * discount
         lambda_values.append(v_lambda)
     return jnp.ndarray(lambda_values, 1)
+
+
+def preprocess(image, bias=0.0):
+    return image / 255.0 - bias

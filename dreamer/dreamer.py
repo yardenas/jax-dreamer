@@ -29,7 +29,7 @@ class Dreamer:
             self,
             observation_space: gym.Space,
             action_space: gym.Space,
-            model: hk.Transformed,
+            model: hk.MultiTransformed,
             actor: hk.Transformed,
             critic: hk.Transformed,
             experience: ReplayBuffer,
