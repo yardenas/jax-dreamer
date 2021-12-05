@@ -36,11 +36,11 @@ class TestReplayBuffer(unittest.TestCase):
                               env.action_space, 2, jax.random.PRNGKey(42))
         interact(env, episodes, episode_length, buffer)
         self.assertEqual(buffer.idx, episodes)
-        self.assertEqual(buffer._episdoe_lengths[0], episode_length)
-        self.assertEqual(buffer._episdoe_lengths[1], episode_length)
-        self.assertEqual(buffer._episdoe_lengths[2], episode_length)
-        self.assertEqual(buffer._episdoe_lengths[-2], 0)
-        self.assertEqual(buffer._episdoe_lengths[-1], 0)
+        self.assertEqual(buffer.episdoe_lengths[0], episode_length)
+        self.assertEqual(buffer.episdoe_lengths[1], episode_length)
+        self.assertEqual(buffer.episdoe_lengths[2], episode_length)
+        self.assertEqual(buffer.episdoe_lengths[-2], 0)
+        self.assertEqual(buffer.episdoe_lengths[-1], 0)
 
     def test_sample(self):
         from jax.config import config as jax_config
@@ -52,6 +52,7 @@ class TestReplayBuffer(unittest.TestCase):
         buffer = ReplayBuffer(capacity, episode_length, env.observation_space,
                               env.action_space, 2, jax.random.PRNGKey(42))
         interact(env, episodes, episode_length, buffer)
-        sample = next(buffer.sample(1, 4))
+        key = jax.random.PRNGKey(43)
+        sample = buffer.sample(key, buffer.data, 4, buffer.episdoe_lengths)
         self.assertEqual(sample['observation'].shape[0], 2)
         self.assertEqual(sample['observation'].shape[1], 4)
