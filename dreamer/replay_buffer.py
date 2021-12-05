@@ -67,8 +67,7 @@ class ReplayBuffer:
         # 2. Sample episodes by weighting their length.
         # 3. Sample and collect sequences from episodes.
 
-        def sample_episode_ids(key: jnp.ndarray,
-                               episode_lengths: jnp.ndarray):
+        def sample_episode_ids(key: jnp.ndarray, episode_lengths: jnp.ndarray):
             out = jnp.where(episode_lengths >= self._length, 1, 0
                             ).astype(jnp.uint32)
             num_episodes = out.sum()
@@ -92,8 +91,7 @@ class ReplayBuffer:
         key, ids_key = jax.random.split(key)
         # Sample uniformly across observations within all episodes which are
         # long enough.
-        idxs: jnp.ndarray = sample_episode_ids(ids_key,
-                                               episode_lengths)
+        idxs: jnp.ndarray = sample_episode_ids(ids_key, episode_lengths)
         sampled_episods = jax.tree_map(lambda x: x[idxs], data)
         sequence_keys = jax.random.split(
             key, self._batch_size + 1)[1:]
