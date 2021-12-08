@@ -5,12 +5,11 @@ An implementation of [Dreamer](https://github.com/danijar/dreamer), a model-base
 ```
 conda create -n jax-dreamer python=3.6
 conda activate jax-dreamer
-pip3 install .
+pip3 install -r requirements.txt
 ```
 ## Experiments
 
 ```
-cd jax-dreamer
 python3 train.py --configs defaults pendulum --log_dir pendulum
 ```
 
