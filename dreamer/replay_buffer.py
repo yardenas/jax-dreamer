@@ -65,8 +65,9 @@ class ReplayBuffer:
     ) -> Batch:
         # Algorithm:
         # 1. Filter too short episodes.
-        # 2. Sample episodes by weighting their length.
-        # 3. Sample and collect sequences from episodes.
+        # 2. Sample episodes, weighting their length.
+        # 3. Sample starting point uniformly and collect sequences from
+        # episodes.
 
         def sample_episode_ids(key: jnp.ndarray, episode_lengths: jnp.ndarray):
             valid_ids = jnp.argwhere(episode_lengths >= self._length
