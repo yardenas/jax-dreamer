@@ -103,13 +103,14 @@ class Dreamer:
     def update(self):
         (self.model.params, self.model.opt_state,
          self.actor.params, self.actor.opt_state,
-         self.critic.params, self.critic.opt_state,
-         report) = self._update(self.model.params, self.model.opt_state,
-                                self.actor.params, self.actor.opt_state,
-                                self.critic.params, self.critic.opt_state,
-                                self.experience.data,
-                                self.experience.episdoe_lengths,
-                                next(self.rng_seq))
+         self.critic.params, self.critic.opt_state), report = self._update(
+            self.model.params, self.model.opt_state,
+            self.actor.params, self.actor.opt_state,
+            self.critic.params, self.critic.opt_state,
+            self.experience.data,
+            self.experience.episdoe_lengths,
+            next(self.rng_seq)
+        )
         self.logger.log_metrics(report, self.training_step)
 
     @functools.partial(jax.jit, static_argnums=0)
@@ -124,13 +125,15 @@ class Dreamer:
             data: Mapping[str, jnp.ndarray],
             episode_lengths: jnp.ndarray,
             key: PRNGKey
-    ) -> Tuple[hk.Params, optax.OptState,
-               hk.Params, optax.OptState,
-               hk.Params, optax.OptState,
+    ) -> Tuple[Tuple[hk.Params, optax.OptState,
+                     hk.Params, optax.OptState,
+                     hk.Params, optax.OptState],
                dict]:
         keys = jax.random.split(key, self.c.update_steps)
-        training_report = None
-        for key in keys:
+
+        def step(carry, key):
+            (model_params, model_opt_state, actor_params, actor_opt_state,
+             critic_params, critic_opt_state) = carry
             batch = self.experience.sample(key, data, episode_lengths)
             key, subkey = jax.random.split(key)
             model_params, model_report, features = self.update_model(
@@ -144,14 +147,17 @@ class Dreamer:
                 generated_features, critic_params, critic_opt_state,
                 lambda_values)
             report = {**model_report, **actor_report, **critic_report}
-            if training_report:
-                training_report = jax.tree_multimap(
-                    lambda x, y: (x + y) / self.c.update_steps,
-                    training_report, report)
-            else:
-                training_report = report
-        return (model_params, model_opt_state, actor_params, actor_opt_state,
-                critic_params, critic_opt_state, training_report)
+            return (model_params, model_opt_state, actor_params,
+                    actor_opt_state, critic_params, critic_opt_state), report
+
+        out, reports = jax.lax.scan(
+            step,
+            init=(model_params, model_opt_state,
+                  actor_params,
+                  actor_opt_state, critic_params, critic_opt_state),
+            xs=keys)
+        reports = jax.tree_map(lambda x: x.mean(), reports)
+        return out, reports
 
     def update_model(
             self,
