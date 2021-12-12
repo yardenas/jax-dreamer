@@ -109,6 +109,7 @@ class Dreamer:
             self.critic.params, self.critic.opt_state,
             self.experience.data,
             self.experience.episdoe_lengths,
+            self.experience.idx,
             next(self.rng_seq)
         )
         self.logger.log_metrics(report, self.training_step)
@@ -124,7 +125,8 @@ class Dreamer:
             critic_opt_state: optax.OptState,
             data: Mapping[str, jnp.ndarray],
             episode_lengths: jnp.ndarray,
-            key: PRNGKey
+            last_episode_idx: int,
+            key: PRNGKey,
     ) -> Tuple[Tuple[hk.Params, optax.OptState,
                      hk.Params, optax.OptState,
                      hk.Params, optax.OptState],
@@ -134,7 +136,8 @@ class Dreamer:
         def step(carry, key):
             (model_params, model_opt_state, actor_params, actor_opt_state,
              critic_params, critic_opt_state) = carry
-            batch = self.experience.sample(key, data, episode_lengths)
+            batch = self.experience.sample(key, data, episode_lengths,
+                                           last_episode_idx)
             key, subkey = jax.random.split(key)
             model_params, model_report, features = self.update_model(
                 batch, model_params, model_opt_state, subkey)

@@ -2,7 +2,6 @@ import functools
 from typing import Mapping, Union
 
 import jax
-import jax.nn as jnn
 import jax.numpy as jnp
 import numpy as np
 from gym.spaces import Space
@@ -58,28 +57,25 @@ class ReplayBuffer:
             self.data['observation'] = \
                 self.data['observation'].at[self.idx, position].set(
                     transition['next_observation'])
-            self.idx = int((self.idx + 1) % self.capacity)
+            # If finished the episode too shortly, discard it, since it cannot
+            # be used for model learning.
+            if position < self._length:
+                self.episdoe_lengths = self.episdoe_lengths.at[self.idx].set(0)
+            else:
+                self.idx = int((self.idx + 1) % self.capacity)
 
     @functools.partial(jax.jit, static_argnums=0)
     def sample(
             self,
             key: jnp.ndarray,
             data: Mapping[str, jnp.ndarray],
-            episode_lengths: jnp.ndarray
+            episode_lengths: jnp.ndarray,
+            idx: int
     ) -> Batch:
         # Algorithm:
-        # 1. Filter too short episodes.
-        # 2. Sample episodes, weighting their length.
-        # 3. Sample starting point uniformly and collect sequences from
+        # 1. Sample episodes uniformly at random.
+        # 2. Sample starting point uniformly and collect sequences from
         # episodes.
-
-        def sample_episode_ids(key: jnp.ndarray, episode_lengths: jnp.ndarray):
-            valid_ids = jnp.argwhere(episode_lengths >= self._length
-                                     ).squeeze(-1)
-            sample = jax.random.choice(
-                key, valid_ids, (self._batch_size,),
-                p=jnn.softmax(episode_lengths[valid_ids]))
-            return sample
 
         def sample_sequence(key: jnp.ndarray,
                             episode_data: Mapping[str, jnp.ndarray],
@@ -89,14 +85,12 @@ class ReplayBuffer:
                 key, (), 0, episode_length - self._length + 1)
             return jax.tree_map(
                 lambda x: jax.lax.dynamic_slice(
-                    x, (start,) + (0, ) * (len(x.shape) - 1),
-                    (self._length,) + x.shape[1:]),
+                    x, (start,) + (0,) * (len(x.shape) - 1),
+                       (self._length,) + x.shape[1:]),
                 episode_data)
 
         key, ids_key = jax.random.split(key)
-        # Sample uniformly across observations within all episodes which are
-        # long enough.
-        idxs: jnp.ndarray = sample_episode_ids(ids_key, episode_lengths)
+        idxs = jax.random.randint(ids_key, (self._batch_size,), 0, idx)
         sampled_episods = jax.tree_map(lambda x: x[idxs], data)
         sequence_keys = jax.random.split(key, self._batch_size + 1)[1:]
         sampled_sequences = jax.vmap(sample_sequence, (0, 0, 0))(
