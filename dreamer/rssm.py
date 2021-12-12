@@ -114,8 +114,9 @@ class RSSM(hk.Module):
             features = features.at[:, t].set(jnp.concatenate(state, -1))
 
         def joint_mvn(dists):
-            mvn = tfd.MultivariateNormalDiag(*zip(*dists))
-            return tfd.BatchReshape(mvn, observations.shape[:2])
+            mus, stddevs = jnp.asarray(list(zip(*dists))
+                                       ).transpose((0, 2, 1, 3))
+            return tfd.MultivariateNormalDiag(mus, stddevs)
 
         prior = joint_mvn(priors)
         posterior = joint_mvn(posteriors)

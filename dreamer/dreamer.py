@@ -34,32 +34,32 @@ class Dreamer:
             critic: hk.Transformed,
             experience: ReplayBuffer,
             logger: TrainingLogger,
-            config
+            config,
+            prefil_policy=None
     ):
         super(Dreamer, self).__init__()
+        self.c = config
         self.rng_seq = hk.PRNGSequence(config.seed)
         self.model = utils.Learner(model, next(self.rng_seq), config.model_opt,
                                    observation_space.sample()[None, None],
                                    action_space.sample()[None, None])
+        features_example = jnp.concatenate(self.init_state, -1)[None]
         self.actor = utils.Learner(actor, next(self.rng_seq), config.actor_opt,
-                                   observation_space.sample()[None, None])
+                                   features_example)
         self.critic = utils.Learner(critic, next(self.rng_seq),
-                                    config.critic_opt,
-                                    observation_space.sample()[None, None])
+                                    config.critic_opt, features_example[None])
         self.experience = experience
         self.logger = logger
         self.state = (self.init_state, jnp.zeros(action_space.shape))
-        self.c = config
         self.training_step = 0
-        self._prefill_policy = action_space.sample
+        self._prefill_policy = prefil_policy or (
+            lambda x: action_space.sample())
 
     def __call__(self, observation: Observation, training=True):
         if self.training_step <= self.c.prefill and training:
-            return self._prefill_policy()
+            return self._prefill_policy(observation)
         if self.time_to_update and training:
             self.update()
-        if self.time_to_log and training:
-            self.logger.log_metrics(self.training_step)
         action, current_state = self.policy(
             self.state[0], self.state[1], observation, self.model.params,
             self.actor.params, next(self.rng_seq), training)
@@ -81,14 +81,14 @@ class Dreamer:
         key, subkey = jax.random.split(key)
         _, current_state = filter_(model_params, key, prev_state, prev_action,
                                    observation)
-        features = jnp.concatenate(current_state, -1)
+        features = jnp.concatenate(current_state, -1)[None]
         policy = self.actor.apply(actor_params, features)
         action = policy.sample(seed=key) if training else policy.mode(
             seed=key)
-        return action, current_state
+        return action.squeeze(0), current_state
 
     def observe(self, transition):
-        self.training_step += 1
+        self.training_step += self.c.action_repeat
         self.experience.store(transition)
         if transition['terminal'] or transition['info'].get(
                 'TimeLimit.truncated', False):
@@ -96,20 +96,21 @@ class Dreamer:
 
     @property
     def init_state(self):
-        return init_state(1, self.c.rssm['stochastic_size'],
-                          self.c.rss['deterministic_size'])
+        state = init_state(1, self.c.rssm['stochastic_size'],
+                           self.c.rssm['deterministic_size'])
+        return jax.tree_map(lambda x: x.squeeze(0), state)
 
     def update(self):
         (self.model.params, self.model.opt_state,
          self.actor.params, self.actor.opt_state,
          self.critic.params, self.critic.opt_state,
-         ) = self._update(self.model.params, self.model.opt_state,
-                          self.actor.params, self.actor.opt_state,
-                          self.critic.params, self.critic.opt_state,
-                          self.experience.data,
-                          self.experience.episdoe_lengths,
-                          next(self.rng_seq))
-        self.logger.log_metrics(self.training_step)
+         report) = self._update(self.model.params, self.model.opt_state,
+                                self.actor.params, self.actor.opt_state,
+                                self.critic.params, self.critic.opt_state,
+                                self.experience.data,
+                                self.experience.episdoe_lengths,
+                                next(self.rng_seq))
+        self.logger.log_metrics(report, self.training_step)
 
     @functools.partial(jax.jit, static_argnums=0)
     def _update(
@@ -125,11 +126,12 @@ class Dreamer:
             key: PRNGKey
     ) -> Tuple[hk.Params, optax.OptState,
                hk.Params, optax.OptState,
-               hk.Params, optax.OptState]:
+               hk.Params, optax.OptState,
+               dict]:
         keys = jax.random.split(key, self.c.update_steps)
+        training_report = None
         for key in keys:
-            batch = self.experience.sample(key, data, self.c.sequence_length,
-                                           episode_lengths)
+            batch = self.experience.sample(key, data, episode_lengths)
             key, subkey = jax.random.split(key)
             model_params, model_report, features = self.update_model(
                 batch, model_params, model_opt_state, subkey)
@@ -142,10 +144,14 @@ class Dreamer:
                 generated_features, critic_params, critic_opt_state,
                 lambda_values)
             report = {**model_report, **actor_report, **critic_report}
-            for k, v in report.items():
-                self.logger[k].update_state(v)
+            if training_report:
+                training_report = jax.tree_multimap(
+                    lambda x, y: (x + y) / self.c.update_steps,
+                    training_report, report)
+            else:
+                training_report = report
         return (model_params, model_opt_state, actor_params, actor_opt_state,
-                critic_params, critic_opt_state)
+                critic_params, critic_opt_state, training_report)
 
     def update_model(
             self,
@@ -160,7 +166,8 @@ class Dreamer:
                                   batch['action'])
             (prior,
              posterior), features, decoded, reward, terminal = outputs_infer
-            kl = tfd.kl_divergence(posterior, prior).mean()
+            kl = jnp.maximum(tfd.kl_divergence(posterior, prior).mean(),
+                             self.c.free_kl)
             log_p_obs = decoded.log_prob(batch['observation']).mean()
             log_p_rews = reward.log_prob(batch['reward']).mean()
             log_p_terms = reward.log_prob(batch['terminal']).mean()
@@ -262,8 +269,3 @@ class Dreamer:
     def time_to_update(self):
         return self.training_step > self.c.prefill and \
                self.training_step % self.c.train_every == 0
-
-    @property
-    def time_to_log(self):
-        return self.training_step and self.training_step % \
-               self.c.log_every == 0

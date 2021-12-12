@@ -12,7 +12,7 @@ from dreamer.replay_buffer import ReplayBuffer
 
 def create_model(config, observation_space):
     def model():
-        _model = models.WorldModel(observation_space.shape, config)
+        _model = models.WorldModel(observation_space, config)
 
         def filter_state(prev_state, prev_action, observation):
             return _model(prev_state, prev_action, observation)
@@ -39,8 +39,8 @@ def create_model(config, observation_space):
 
 def create_actor(config, action_space):
     actor = hk.without_apply_rng(hk.transform(
-        lambda obs: models.Actor(config.actor['output_sizes'] +
-                                 np.prod(action_space.shape),
+        lambda obs: models.Actor(tuple(config.actor['output_sizes']) +
+                                 (2 * np.prod(action_space.shape),),
                                  config.actor['min_stddev'])(obs))
     )
     return actor
@@ -48,7 +48,7 @@ def create_actor(config, action_space):
 
 def create_critic(config):
     critic = hk.without_apply_rng(hk.transform(
-        lambda obs: DenseDecoder(config.critic['output_sizes'] + (1,),
+        lambda obs: DenseDecoder(tuple(config.critic['output_sizes']) + (1,),
                                  'normal')(obs)
     ))
     return critic
@@ -71,6 +71,9 @@ def make_agent(config, environment, logger):
 
 if __name__ == '__main__':
     config = train_utils.load_config()
+    if not config.jit:
+        from jax.config import config as jax_config
+        jax_config.update('jax_disable_jit', True)
     environment = env_wrappers.make_env(config.task, config.time_limit,
                                         config.action_repeat, config.seed)
     logger = TrainingLogger(config.log_dir)

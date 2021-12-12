@@ -10,7 +10,7 @@ def do_episode(agent, training, environment, config, pbar, render):
     episode_summary = defaultdict(list)
     steps = 0
     done = False
-    observation = environment.init_state()
+    observation = environment.reset()
     while not done:
         action = agent(observation, training)
         next_observation, reward, done, info = environment.step(action)
@@ -142,13 +142,13 @@ def load_config():
                 return tuple(x)
             return x
 
-        return lambda x: parse_string(x) if isinstance(x,
-                                                       str) else parse_object(x)
+        return lambda x: parse_string(x) if isinstance(
+            x, str) else parse_object(x)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--configs', nargs='+', required=True)
     args, remaining = parser.parse_known_args()
-    with open('sac/config.yaml') as file:
+    with open('dreamer/config.yaml') as file:
         configs = yaml.safe_load(file)
     defaults = {}
     for name in args.configs:

@@ -2,11 +2,10 @@ defaults:
   # Train Script
   log_dir: results
   seed: 0
-  task: pendulum-swingup
+  task: pendulum.swingup
   time_limit: 1000
   action_repeat: 2
   steps: 1e6
-  log_every: 1000
   training_steps_per_epoch: 2.5e4
   evaluation_steps_per_epoch: 1e4
   prefill: 5000
@@ -18,11 +17,16 @@ defaults:
 
   # World Model
   rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 32}
-  rssm_opt: {lr: 3e-4, eps: 1e-5, clip: 100}
+  model_opt: {lr: 3e-4, eps: 1e-5, clip: 100}
+  encoder: {depth: 32, kernels: [4, 4, 4, 4]}
+  decoder: {depth: 32, kernels: [5, 5, 6, 6]}
+  reward: {output_sizes: [400, 400]}
+  terminal: {output_sizes: [400, 400]}
+  free_kl: 3.0
 
-  # Actor Critic
-  actor: {output_sizes: (400, 400, 400, 400), min_std: 1e-4}
-  critic: {output_sizes: (400, 400, 400, 400)}
+  # Actor-Critic
+  actor: {output_sizes: [400, 400, 400, 400], min_stddev: 1e-4}
+  critic: {output_sizes: [400, 400, 400, 400]}
   actor_opt: {lr: 3e-4, eps: 1e-5, clip: 100}
   critic_opt: {lr: 3e-4, eps: 1e-5, clip: 100}
   discount: 0.99
@@ -31,9 +35,11 @@ defaults:
 
 debug:
   jit: False
-  time_limit: 200
-  training_steps_per_epoch: 300
-  evaluation_steps_per_epoch: 300
-  prefill: 200
+  time_limit: 100
+  training_steps_per_epoch: 200
+  evaluation_steps_per_epoch: 100
+  prefill: 100
+  train_every: 100
+  update_steps: 2
   render_episodes: 0
-  replay: {capacity: 1000, batch: 32}
+  replay: {capacity: 10, batch: 5, sequence_length: 12}

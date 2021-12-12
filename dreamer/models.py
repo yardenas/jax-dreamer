@@ -16,14 +16,14 @@ class WorldModel(hk.Module):
         super(WorldModel, self).__init__()
         self.rssm = RSSM(config)
         self.encoder = b.Encoder(config.encoder['depth'],
-                                 config.encoder['kernels'])
+                                 tuple(config.encoder['kernels']))
         self.decoder = b.Decoder(config.decoder['depth'],
-                                 config.decoder['kernels'],
+                                 tuple(config.decoder['kernels']),
                                  observation_space.shape)
-        self.reward = b.DenseDecoder(config.reward['output_sizes'] + (1,),
-                                     'normal')
-        self.terminal = b.DenseDecoder(config.terminal['output_sizes'] + (1,),
-                                       'bernoulli')
+        self.reward = b.DenseDecoder(tuple(config.reward['output_sizes'])
+                                     + (1,), 'normal')
+        self.terminal = b.DenseDecoder(tuple(config.terminal['output_sizes'])
+                                       + (1,), 'bernoulli')
 
     def __call__(
             self,
