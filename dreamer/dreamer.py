@@ -199,7 +199,7 @@ class Dreamer:
         discount = jnp.cumprod(
             self.c.discount * jnp.ones((self.c.imag_horizon - 1,))
         )
-        discount = jnp.concatenate(jnp.ones(()), discount)
+        discount = jnp.concatenate([jnp.ones((1,)), discount])
 
         def loss(params: hk.Params) -> Tuple[float,
                                              Tuple[jnp.ndarray, jnp.ndarray]]:
@@ -216,7 +216,7 @@ class Dreamer:
                     lambda_values * discount[:-1]
             ).mean(), (generated_features, lambda_values)
 
-        (loss_, grads), aux = jax.value_and_grad(loss, has_aux=True)(params)
+        (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(params)
         updates, new_opt_state = self.actor.optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
         return new_params, {'agent/actor/loss': loss_,
@@ -233,12 +233,12 @@ class Dreamer:
         discount = jnp.cumprod(
             self.c.discount * jnp.ones((self.c.imag_horizon - 1,))
         )
-        discount = jnp.concatenate(jnp.ones(()), discount)
+        discount = jnp.concatenate([jnp.ones((1,)), discount])
 
         def loss(params: hk.Params) -> float:
-            values = self.critic.apply(params, features)
+            values = self.critic.apply(params, features[:, :-1])
             targets = jax.lax.stop_gradient(lambda_values)
-            return -values.log_prob(targets * discount).mean()
+            return -values.log_prob(targets * discount[:-1]).mean()
 
         (loss_, grads) = jax.value_and_grad(loss)(params)
         updates, new_opt_state = self.critic.optimizer.update(grads, opt_state)

@@ -38,11 +38,11 @@ class WorldModel(hk.Module):
 
     def generate_sequence(
             self,
-            initial_state: State, policy: hk.Transformed,
-            policy_params: hk.Params
+            initial_features: jnp.ndarray, actor: hk.Transformed,
+            actor_params: hk.Params, actions=None
     ) -> Tuple[jnp.ndarray, tfd.Normal, tfd.Bernoulli]:
-        features = self.rssm.generate_sequence(initial_state,
-                                               policy, policy_params)
+        features = self.rssm.generate_sequence(initial_features, actor,
+                                               actor_params, actions)
         reward = self.reward(features)
         terminal = self.terminal(features)
         return features, reward, terminal

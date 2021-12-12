@@ -2,8 +2,11 @@ import os.path
 import pathlib
 from collections import defaultdict
 
+import jax
 import numpy as np
 from tqdm import tqdm
+
+from dreamer.utils import evaluate_model
 
 
 def do_episode(agent, training, environment, config, pbar, render):
@@ -75,8 +78,18 @@ def evaluate(agent, train_env, logger, config, steps):
         videos = list(map(lambda episode: episode.get('image'),
                           evaluation_episodes_summaries[
                           :config.render_episodes]))
-        logger.log_video(
-            np.array(videos, copy=False).transpose([0, 1, 4, 2, 3]), steps)
+        logger.log_video(np.array(videos, copy=False).transpose([0, 1, 4, 2, 3])
+                         , steps)
+    if config.evaluate_model:
+        more_vidoes = evaluate_model(
+            evaluation_episodes_summaries[0]['observation'],
+            evaluation_episodes_summaries[0]['action'],
+            next(agent.rng_seq),
+            agent.model, agent.model.params)
+        for vid, name in zip(more_vidoes, ('gt', 'infered', 'generated')):
+            logger.log_video(
+                np.array(vid, copy=False).transpose([0, 1, 4, 2, 3]), steps,
+                name=name)
     return make_summary(evaluation_episodes_summaries, 'evaluation')
 
 

@@ -71,23 +71,28 @@ class RSSM(hk.Module):
         posterior, state = self.posterior(state, observation)
         return (prior, posterior), state
 
-    def generate_sequence(self, initial_state: State, policy: hk.Transformed,
-                          policy_params: hk.Params) -> jnp.ndarray:
+    def generate_sequence(self, initial_features: jnp.ndarray,
+                          actor: hk.Transformed,
+                          actor_params: hk.Params,
+                          actions=None) -> jnp.ndarray:
         def vec(state):
             return jnp.concatenate(state, -1)
 
         sequence = jnp.zeros(
-            (initial_state[0].shape[0],
+            (initial_features.shape[0],
              self.c.imag_horizon,
              self.c.rssm['stochastic_size'] + self.c.rssm['deterministic_size'])
         )
-        state = initial_state
-        keys = hk.next_rng_keys(self.c.imag_horizon)
+        state = jnp.split(initial_features,
+                          (self.c.rssm['stochastic_size'],), -1)
+        keys = hk.next_rng_keys(
+            self.c.imag_horizon if not actions else actions.shape[1]
+        )
         for t, key in enumerate(keys):
-            action = policy.apply(policy_params,
-                                  key,
-                                  jax.lax.stop_gradient(vec(state))
-                                  ).sample(seed=key)
+            action = actor.apply(
+                actor_params,
+                jax.lax.stop_gradient(vec(state))
+            ).sample(seed=key) if not actions else actions[:, t]
             _, state = self.prior(state, action)
             sequence = sequence.at[:, t].set(vec(state))
         return sequence

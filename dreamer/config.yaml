@@ -14,6 +14,7 @@ defaults:
   replay: {capacity: 1000, batch: 32, sequence_length: 50}
   jit: True
   render_episodes: 1
+  evaluate_model: True
 
   # World Model
   rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 32}
@@ -23,6 +24,7 @@ defaults:
   reward: {output_sizes: [400, 400]}
   terminal: {output_sizes: [400, 400]}
   free_kl: 3.0
+  kl_scale: 1.0
 
   # Actor-Critic
   actor: {output_sizes: [400, 400, 400, 400], min_stddev: 1e-4}
