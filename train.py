@@ -18,9 +18,9 @@ def create_model(config, observation_space):
             return _model(prev_state, prev_action, observation)
 
         def generate_sequence(initial_state, policy,
-                              policy_params):
+                              policy_params, actions=None):
             return _model.generate_sequence(initial_state, policy,
-                                            policy_params)
+                                            policy_params, actions)
 
         def observe_sequence(observations, actions):
             return _model.observe_sequence(observations, actions)

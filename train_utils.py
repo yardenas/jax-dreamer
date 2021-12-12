@@ -2,7 +2,7 @@ import os.path
 import pathlib
 from collections import defaultdict
 
-import jax
+import jax.numpy as jnp
 import numpy as np
 from tqdm import tqdm
 
@@ -79,17 +79,17 @@ def evaluate(agent, train_env, logger, config, steps):
                           evaluation_episodes_summaries[
                           :config.render_episodes]))
         logger.log_video(np.array(videos, copy=False).transpose([0, 1, 4, 2, 3])
-                         , steps)
+                         , steps, name='videos/overview')
     if config.evaluate_model:
         more_vidoes = evaluate_model(
-            evaluation_episodes_summaries[0]['observation'],
-            evaluation_episodes_summaries[0]['action'],
+            jnp.asarray(evaluation_episodes_summaries[0]['observation']),
+            jnp.asarray(evaluation_episodes_summaries[0]['action']),
             next(agent.rng_seq),
             agent.model, agent.model.params)
         for vid, name in zip(more_vidoes, ('gt', 'infered', 'generated')):
             logger.log_video(
                 np.array(vid, copy=False).transpose([0, 1, 4, 2, 3]), steps,
-                name=name)
+                name='videos/' + name)
     return make_summary(evaluation_episodes_summaries, 'evaluation')
 
 

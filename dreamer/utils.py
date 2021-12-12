@@ -1,3 +1,4 @@
+import functools
 from typing import Callable, Tuple, Union
 
 import haiku as hk
@@ -50,22 +51,23 @@ def preprocess(image, bias=0.0):
     return image / 255.0 - bias
 
 
-@jax.jit
+@functools.partial(jax.jit, static_argnums=3)
 def evaluate_model(observations, actions, key, model, model_params):
     length = min(len(observations) + 1, 50)
     _, generate_sequence, infer, decode = model.apply
     key, subkey = jax.random.split(key)
     _, features, infered_decoded, *_ = infer(model_params,
                                              subkey,
-                                             observations[:length],
-                                             actions[:length])
+                                             observations[None, :length],
+                                             actions[None, :length])
     conditioning_length = length // 5
     key, subkey = jax.random.split(key)
-    generated = generate_sequence(
-        model_params, subkey, features[:, :conditioning_length], None, None,
-        actions=actions[:, conditioning_length:])
+    generated, *_ = generate_sequence(
+        model_params, subkey,
+        features[:, conditioning_length], None, None,
+        actions=actions[None, conditioning_length:])
     key, subkey = jax.random.split(key)
     generated_decoded = decode(model_params, subkey, generated)
-    out = observations[:length], infered_decoded, generated_decoded
+    out = (observations[None], infered_decoded.mean(), generated_decoded.mean())
     out = jax.tree_map(lambda x: ((x + 0.5) * 255).astype(jnp.uint8), out)
     return out

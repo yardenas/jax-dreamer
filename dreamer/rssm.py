@@ -86,13 +86,13 @@ class RSSM(hk.Module):
         state = jnp.split(initial_features,
                           (self.c.rssm['stochastic_size'],), -1)
         keys = hk.next_rng_keys(
-            self.c.imag_horizon if not actions else actions.shape[1]
+            self.c.imag_horizon if actions is None else actions.shape[1]
         )
         for t, key in enumerate(keys):
             action = actor.apply(
                 actor_params,
                 jax.lax.stop_gradient(vec(state))
-            ).sample(seed=key) if not actions else actions[:, t]
+            ).sample(seed=key) if actions is None else actions[:, t]
             _, state = self.prior(state, action)
             sequence = sequence.at[:, t].set(vec(state))
         return sequence
