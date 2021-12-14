@@ -1,4 +1,4 @@
-from typing import Tuple, Sequence
+from typing import Tuple, Sequence, Optional
 
 import haiku as hk
 import jax
@@ -54,9 +54,13 @@ class BayesianWorldModel(hk.Module):
     def generate_sequence(
             self,
             initial_features: jnp.ndarray, actor: hk.Transformed,
-            actor_params: hk.Params, rssm_params: hk.Params, actions=None
+            actor_params: hk.Params, rssm_params: Optional[hk.Params],
+            actions=None
     ) -> Tuple[jnp.ndarray, tfd.Normal, tfd.Bernoulli]:
         _, generate, *_ = self.rssm.apply
+        if rssm_params is None:
+            rssm_params = self.rssm_posterior.unflatten(
+                self.rssm_posterior().mean())
         features = generate(rssm_params, hk.next_rng_key(),
                             initial_features, actor, actor_params, actions)
         reward = self.reward(features)

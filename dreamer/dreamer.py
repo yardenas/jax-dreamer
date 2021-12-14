@@ -170,7 +170,7 @@ class Dreamer:
             key: PRNGKey
     ) -> Tuple[hk.Params, dict, jnp.ndarray]:
         def loss(params: hk.Params) -> Tuple[float, dict]:
-            _, _, infer, _ = self.model.apply
+            _, _, infer, *_ = self.model.apply
             outputs_infer = infer(params, key, batch['observation'],
                                   batch['action'])
             (prior,

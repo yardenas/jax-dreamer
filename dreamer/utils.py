@@ -54,7 +54,7 @@ def preprocess(image, bias=0.0):
 @functools.partial(jax.jit, static_argnums=3)
 def evaluate_model(observations, actions, key, model, model_params):
     length = min(len(observations) + 1, 50)
-    _, generate_sequence, infer, decode = model.apply
+    _, generate_sequence, infer, decode, *_ = model.apply
     key, subkey = jax.random.split(key)
     _, features, infered_decoded, *_ = infer(model_params,
                                              subkey,
