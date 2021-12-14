@@ -12,7 +12,7 @@ from dreamer.replay_buffer import ReplayBuffer
 
 def create_model(config, observation_space):
     def model():
-        _model = models.WorldModel(observation_space, config)
+        _model = models.BayesianWorldModel(observation_space, config)
 
         def filter_state(prev_state, prev_action, observation):
             return _model(prev_state, prev_action, observation)

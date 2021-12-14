@@ -117,12 +117,6 @@ class RSSM(hk.Module):
             priors.append((prior.mean(), prior.stddev()))
             posteriors.append((posterior.mean(), posterior.stddev()))
             features = features.at[:, t].set(jnp.concatenate(state, -1))
-
-        def joint_mvn(dists):
-            mus, stddevs = jnp.asarray(list(zip(*dists))
-                                       ).transpose((0, 2, 1, 3))
-            return tfd.MultivariateNormalDiag(mus, stddevs)
-
-        prior = joint_mvn(priors)
-        posterior = joint_mvn(posteriors)
-        return (prior, posterior), features
+        priors = jnp.asarray(priors)
+        posteriors = jnp.asarray(posteriors)
+        return (priors, posteriors), features

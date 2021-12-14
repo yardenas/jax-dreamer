@@ -1,6 +1,8 @@
+import functools
 from typing import Sequence
 
 import haiku as hk
+import jax
 import jax.nn as jnn
 import jax.numpy as jnp
 from tensorflow_probability.substrates import jax as tfp
@@ -21,6 +23,7 @@ class Encoder(hk.Module):
                 depth = 2 ** i * self._depth
                 x = jnn.relu(hk.Conv2D(depth, kernel, 2, padding='VALID')(x))
             return x
+
         cnn = hk.BatchApply(cnn)
         return hk.Flatten(2)(cnn(observation))
 
@@ -69,6 +72,49 @@ class DenseDecoder(hk.Module):
             bernoulli=lambda p: tfd.Bernoulli(p, dtype=jnp.float32)
         )[self._dist]
         return tfd.Independent(dist(x), 0)
+
+
+class MeanField(hk.Module):
+    def __init__(
+            self,
+            params: hk.Params,
+            stddev=1.0,
+            learnable=True
+    ):
+        super(MeanField, self).__init__()
+        flat_ps, tree_def = jax.tree_flatten(params)
+        self._flattened_params = flat_ps
+        self._tree_def = tree_def
+        self._stddev = stddev
+        self._learnable = learnable
+
+    def __call__(self):
+        flat_params = jax.tree_map(jnp.ravel, self._flattened_params)
+        flat_params = jnp.concatenate(flat_params)
+        if self._learnable:
+            mus = hk.get_parameter(
+                'mean_field_mu', (len(flat_params),),
+                init=hk.initializers.Constant(flat_params)
+            )
+            stddevs = hk.get_parameter(
+                'mean_field_stddev', (len(flat_params),),
+                init=hk.initializers.RandomUniform(maxval=self._stddev)
+            )
+        else:
+            mus = jnp.zeros_like(flat_params)
+            stddevs = jnp.ones_like(flat_params) * self._stddev
+        stddevs = jnn.softplus(stddevs) + 1e-3
+        return tfd.MultivariateNormalDiag(mus, stddevs)
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def unflatten(self, sample):
+        out = []
+        i = 0
+        for p in self._flattened_params:
+            n = p.size
+            out.append(sample[i:i + n].reshape(p.shape))
+            i += n
+        return jax.tree_unflatten(self._tree_def, out)
 
 
 # Following https://github.com/tensorflow/probability/issues/840 and

@@ -18,6 +18,9 @@ defaults:
 
   # World Model
   rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 32}
+  rssm_posterior: {stddev: 1.0, learnable: True}
+  rssm_prior: {stddev: 1.0, learnable: False}
+  rssm_posterior_samples: 10
   model_opt: {lr: 3e-4, eps: 1e-5, clip: 100}
   encoder: {depth: 32, kernels: [4, 4, 4, 4]}
   decoder: {depth: 32, kernels: [5, 5, 6, 6]}
