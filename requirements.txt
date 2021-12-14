@@ -9,7 +9,7 @@ certifi                      2021.10.8
 charset-normalizer           2.0.9
 chex                         0.1.0
 cloudpickle                  2.0.0
-decorator                    5.1.0
+decorator                    4.4.2
 dm-control                   0.0.412862961
 dm-env                       1.5
 dm-haiku                     0.0.6.dev0
@@ -25,6 +25,8 @@ grpcio                       1.42.0
 gym                          0.21.0
 h5py                         3.6.0
 idna                         3.3
+imageio                      2.13.3
+imageio-ffmpeg               0.4.5
 importlib-metadata           4.8.2
 jax                          0.2.26
 jaxlib                       0.1.75
@@ -35,12 +37,14 @@ labmaze                      1.0.5
 libclang                     12.0.0
 lxml                         4.6.4
 Markdown                     3.3.6
+moviepy                      1.0.3
 numpy                        1.21.4
 oauthlib                     3.1.1
 opt-einsum                   3.3.0
 optax                        0.1.0
 Pillow                       8.4.0
 pip                          21.3.1
+proglog                      0.1.9
 protobuf                     3.19.1
 pyasn1                       0.4.8
 pyasn1-modules               0.2.8
@@ -74,11 +78,3 @@ Werkzeug                     2.0.2
 wheel                        0.37.0
 wrapt                        1.13.3
 zipp                         3.6.0
-
-jax~=0.2.26
-numpy~=1.21.4
-gym~=0.21.0
-optax~=0.1.0
-tensorboardx~=2.4.1
-pillow~=8.4.0
-tqdm~=4.62.3
