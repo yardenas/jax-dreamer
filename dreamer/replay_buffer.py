@@ -22,8 +22,7 @@ class ReplayBuffer:
             batch_size: int,
             length: int
     ):
-        device = jax.devices()[0] if (
-                len(jax.devices()) < 2) else jax.devices("cpu")[0]
+        device = jax.devices("cpu")[0]
         self.data = {
             'observation': jax.device_put(jnp.full(
                 (capacity, max_episode_length + 1) + observation_space.shape,
