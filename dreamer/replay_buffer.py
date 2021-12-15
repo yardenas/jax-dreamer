@@ -23,10 +23,11 @@ class ReplayBuffer:
             length: int
     ):
         device = jax.devices("cpu")[0]
+        observation = jnp.concatenate([jax.device_put(jnp.full(
+            (capacity, max_episode_length + 1) + observation_space.shape,
+            jnp.nan, jnp.uint8), device) for _ in range(capacity // 200)], 0)
         self.data = {
-            'observation': jax.device_put(jnp.full(
-                (capacity, max_episode_length + 1) + observation_space.shape,
-                jnp.nan, jnp.uint8), device),
+            'observation': observation,
             'action': jax.device_put(jnp.full(
                 (capacity, max_episode_length) + action_space.shape,
                 jnp.nan, jnp.float32), device),
