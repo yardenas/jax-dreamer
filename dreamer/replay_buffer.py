@@ -19,7 +19,8 @@ class ReplayBuffer:
             observation_space: Space,
             action_space: Space,
             batch_size: int,
-            length: int
+            length: int,
+            dtype=jnp.float32
     ):
         self.data = {
             'observation': np.full(
@@ -38,6 +39,7 @@ class ReplayBuffer:
         self.capacity = capacity
         self._batch_size = batch_size
         self._length = length
+        self.dtype = dtype
 
     def store(self, transition: Transition):
         position = self.episode_lengths[self.idx]
@@ -84,7 +86,9 @@ class ReplayBuffer:
             sampled_episods,
             self.episode_lengths[idxs])
         sampled_sequences['observation'] = preprocess(
-            sampled_sequences['observation']).astype(jnp.float32)
+            sampled_sequences['observation'])
+        sampled_sequences = jax.tree_map(lambda x: x.astype(self.dtype),
+                                         sampled_sequences)
         return jax.device_put(sampled_sequences, jax.devices()[0])
 
     def __len__(self):

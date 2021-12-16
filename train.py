@@ -8,6 +8,7 @@ from dreamer.blocks import DenseDecoder
 from dreamer.dreamer import Dreamer
 from dreamer.logger import TrainingLogger
 from dreamer.replay_buffer import ReplayBuffer
+from dreamer.utils import get_mixed_precision_policy
 
 
 def create_model(config, observation_space):
@@ -55,11 +56,13 @@ def create_critic(config):
 
 
 def make_agent(config, environment, logger):
+    dtype = get_mixed_precision_policy(config.precision).compute_dtype
     experience = ReplayBuffer(config.replay['capacity'], config.time_limit,
                               environment.observation_space,
                               environment.action_space,
                               config.replay['batch'],
-                              config.replay['sequence_length'])
+                              config.replay['sequence_length'],
+                              dtype)
     agent = Dreamer(environment.observation_space,
                     environment.action_space,
                     create_model(config, environment.observation_space),
@@ -73,7 +76,13 @@ if __name__ == '__main__':
     config = train_utils.load_config()
     if not config.jit:
         from jax.config import config as jax_config
+
         jax_config.update('jax_disable_jit', True)
+    if config.precision == 16:
+        policy = get_mixed_precision_policy(config.precision)
+        hk.mixed_precision.set_policy(models.WorldModel, policy)
+        hk.mixed_precision.set_policy(models.Actor, policy)
+        hk.mixed_precision.set_policy(DenseDecoder, policy)
     environment = env_wrappers.make_env(config.task, config.time_limit,
                                         config.action_repeat, config.seed)
     logger = TrainingLogger(config.log_dir)

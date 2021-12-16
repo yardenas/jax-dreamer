@@ -15,6 +15,7 @@ defaults:
   jit: True
   render_episodes: 1
   evaluate_model: True
+  precision: 16
 
   # World Model
   rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 32}

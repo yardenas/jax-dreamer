@@ -4,6 +4,7 @@ from typing import Callable, Tuple, Union
 import haiku as hk
 import jax.numpy as jnp
 import jax.random
+import jmp
 import numpy as np
 import optax
 
@@ -54,6 +55,12 @@ def preprocess(image):
 
 def quantize(image):
     return ((image + 0.5) * 255).astype(np.uint8)
+
+
+def get_mixed_precision_policy(precision):
+    policy = ('params=float32,compute=float' + str(precision) +
+              ',output=float' + str(precision))
+    return jmp.get_policy(policy)
 
 
 @functools.partial(jax.jit, static_argnums=3)

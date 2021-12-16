@@ -1,10 +1,8 @@
 import functools
 import os
 import pickle
-from typing import Mapping, Tuple
-from tqdm import tqdm
-
 from collections import defaultdict
+from typing import Mapping, Tuple
 
 import gym
 import haiku as hk
@@ -13,6 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from tensorflow_probability.substrates import jax as tfp
+from tqdm import tqdm
 
 import dreamer.utils as utils
 from dreamer.logger import TrainingLogger
@@ -55,6 +54,7 @@ class Dreamer:
         self.logger = logger
         self.state = (self.init_state, jnp.zeros(action_space.shape))
         self.training_step = 0
+        self.precision_policy = policy
         self._prefill_policy = prefil_policy or (
             lambda x: action_space.sample())
 
@@ -67,7 +67,7 @@ class Dreamer:
             self.state[0], self.state[1], observation, self.model.params,
             self.actor.params, next(self.rng_seq), training)
         self.state = (current_state, action)
-        return np.clip(action, -1.0, 1.0)
+        return np.clip(action.astype(np.float32), -1.0, 1.0)
 
     @functools.partial(jax.jit, static_argnums=(0, 7))
     def policy(
@@ -170,9 +170,9 @@ class Dreamer:
             log_p_terms = reward.log_prob(batch['terminal']).mean()
             loss_ = self.c.kl_scale * kl - log_p_obs - log_p_rews - log_p_terms
             return loss_, {'agent/model/kl': kl,
-                           'agent/model/log_p_observation': log_p_obs,
-                           'agent/model/log_p_reward': log_p_rews,
-                           'agent/model/log_p_terminal': log_p_terms,
+                           'agent/model/log_p_observation': -log_p_obs,
+                           'agent/model/log_p_reward': -log_p_rews,
+                           'agent/model/log_p_terminal': -log_p_terms,
                            'features': features}
 
         grads, report = jax.grad(loss, has_aux=True)(params)
