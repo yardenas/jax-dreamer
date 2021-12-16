@@ -64,7 +64,7 @@ def get_mixed_precision_policy(precision):
 
 
 @functools.partial(jax.jit, static_argnums=3)
-def evaluate_model(observations, actions, key, model, model_params):
+def evaluate_model(observations, actions, key, model, model_params, precision):
     length = min(len(observations) + 1, 50)
     _, generate_sequence, infer, decode = model.apply
     key, subkey = jax.random.split(key)

@@ -37,24 +37,28 @@ class Dreamer:
             experience: ReplayBuffer,
             logger: TrainingLogger,
             config,
+            precision=utils.get_mixed_precision_policy(32),
             prefil_policy=None
     ):
         super(Dreamer, self).__init__()
         self.c = config
         self.rng_seq = hk.PRNGSequence(config.seed)
-        self.model = utils.Learner(model, next(self.rng_seq), config.model_opt,
-                                   observation_space.sample()[None, None],
-                                   action_space.sample()[None, None])
+        dtype = precision.compute_dtype
+        self.model = utils.Learner(
+            model, next(self.rng_seq), config.model_opt,
+            observation_space.sample()[None, None].astype(dtype),
+            action_space.sample()[None, None].astype(dtype))
         features_example = jnp.concatenate(self.init_state, -1)[None]
         self.actor = utils.Learner(actor, next(self.rng_seq), config.actor_opt,
-                                   features_example)
-        self.critic = utils.Learner(critic, next(self.rng_seq),
-                                    config.critic_opt, features_example[None])
+                                   features_example.astype(dtype))
+        self.critic = utils.Learner(
+            critic, next(self.rng_seq), config.critic_opt,
+            features_example[None].astype(dtype))
         self.experience = experience
         self.logger = logger
         self.state = (self.init_state, jnp.zeros(action_space.shape))
         self.training_step = 0
-        self.precision_policy = policy
+        self.precision = precision
         self._prefill_policy = prefil_policy or (
             lambda x: action_space.sample())
 
@@ -82,6 +86,7 @@ class Dreamer:
     ) -> Tuple[jnp.ndarray, State]:
         filter_, *_ = self.model.apply
         key, subkey = jax.random.split(key)
+        observation = self.precision.cast_to_compute(observation)
         _, current_state = filter_(model_params, key, prev_state, prev_action,
                                    observation)
         features = jnp.concatenate(current_state, -1)[None]

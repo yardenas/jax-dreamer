@@ -56,19 +56,19 @@ def create_critic(config):
 
 
 def make_agent(config, environment, logger):
-    dtype = get_mixed_precision_policy(config.precision).compute_dtype
+    precision_policy = get_mixed_precision_policy(config.precision)
     experience = ReplayBuffer(config.replay['capacity'], config.time_limit,
                               environment.observation_space,
                               environment.action_space,
                               config.replay['batch'],
                               config.replay['sequence_length'],
-                              dtype)
+                              precision_policy.compute_dtype)
     agent = Dreamer(environment.observation_space,
                     environment.action_space,
                     create_model(config, environment.observation_space),
                     create_actor(config, environment.action_space),
                     create_critic(config), experience,
-                    logger, config)
+                    logger, config, precision_policy)
     return agent
 
 
