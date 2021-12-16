@@ -57,7 +57,7 @@ class RenderedObservation(ObservationWrapper):
             image = image.resize(self._size, Image.BILINEAR)
         image = np.array(image, copy=False)
         image = np.clip(image, 0, 255).astype(np.float32)
-        return preprocess(image, 0.5)
+        return preprocess(image)
 
 
 class DeepMindBridge(gym.Env):

@@ -4,6 +4,7 @@ from typing import Callable, Tuple, Union
 import haiku as hk
 import jax.numpy as jnp
 import jax.random
+import numpy as np
 import optax
 
 PRNGKey = jnp.ndarray
@@ -47,8 +48,12 @@ def compute_lambda_values(
     return jnp.asarray(lambda_values).transpose()
 
 
-def preprocess(image, bias=0.0):
-    return image / 255.0 - bias
+def preprocess(image):
+    return image / 255.0 - 0.5
+
+
+def quantize(image):
+    return ((image + 0.5) * 255).astype(np.uint8)
 
 
 @functools.partial(jax.jit, static_argnums=3)

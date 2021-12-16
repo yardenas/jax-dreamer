@@ -2,6 +2,9 @@ import functools
 import os
 import pickle
 from typing import Mapping, Tuple
+from tqdm import tqdm
+
+from collections import defaultdict
 
 import gym
 import haiku as hk
@@ -101,66 +104,51 @@ class Dreamer:
         return jax.tree_map(lambda x: x.squeeze(0), state)
 
     def update(self):
-        (self.model.params, self.model.opt_state,
-         self.actor.params, self.actor.opt_state,
-         self.critic.params, self.critic.opt_state), report = self._update(
-            self.model.params, self.model.opt_state,
-            self.actor.params, self.actor.opt_state,
-            self.critic.params, self.critic.opt_state,
-            self.experience.data,
-            self.experience.episdoe_lengths,
-            self.experience.idx,
-            next(self.rng_seq)
-        )
-        self.logger.log_metrics(report, self.training_step)
+        reports = defaultdict(float)
+        for _ in tqdm(range(self.c.update_steps)):
+            batch = self.experience.sample(next(self.rng_seq))
+            (self.model.params, self.model.opt_state,
+             self.actor.params, self.actor.opt_state,
+             self.critic.params, self.critic.opt_state), report = self._update(
+                batch, self.model.params, self.model.opt_state,
+                self.actor.params, self.actor.opt_state,
+                self.critic.params, self.critic.opt_state,
+                next(self.rng_seq))
+            # Average training metrics.
+            for k, v in report.items():
+                reports[k] += float(v) / self.c.update_steps
+        self.logger.log_metrics(reports, self.training_step)
 
     @functools.partial(jax.jit, static_argnums=0)
     def _update(
             self,
+            batch: Batch,
             model_params: hk.Params,
             model_opt_state: optax.OptState,
             actor_params: hk.Params,
             actor_opt_state: optax.OptState,
             critic_params: hk.Params,
             critic_opt_state: optax.OptState,
-            data: Mapping[str, jnp.ndarray],
-            episode_lengths: jnp.ndarray,
-            last_episode_idx: int,
             key: PRNGKey,
     ) -> Tuple[Tuple[hk.Params, optax.OptState,
                      hk.Params, optax.OptState,
                      hk.Params, optax.OptState],
                dict]:
-        keys = jax.random.split(key, self.c.update_steps)
-
-        def step(carry, key):
-            (model_params, model_opt_state, actor_params, actor_opt_state,
-             critic_params, critic_opt_state) = carry
-            batch = self.experience.sample(key, data, episode_lengths,
-                                           last_episode_idx)
-            key, subkey = jax.random.split(key)
-            model_params, model_report, features = self.update_model(
-                batch, model_params, model_opt_state, subkey)
-            key, subkey = jax.random.split(key)
-            actor_params, actor_report, (
-                generated_features, lambda_values
-            ) = self.update_actor(features, actor_params, actor_opt_state,
-                                  model_params, critic_params, subkey)
-            critic_params, critic_report = self.update_critic(
-                generated_features, critic_params, critic_opt_state,
-                lambda_values)
-            report = {**model_report, **actor_report, **critic_report}
-            return (model_params, model_opt_state, actor_params,
-                    actor_opt_state, critic_params, critic_opt_state), report
-
-        out, reports = jax.lax.scan(
-            step,
-            init=(model_params, model_opt_state,
-                  actor_params,
-                  actor_opt_state, critic_params, critic_opt_state),
-            xs=keys)
-        reports = jax.tree_map(lambda x: x.mean(), reports)
-        return out, reports
+        key, subkey = jax.random.split(key)
+        model_params, model_report, features = self.update_model(
+            batch, model_params, model_opt_state, subkey)
+        key, subkey = jax.random.split(key)
+        actor_params, actor_report, (
+            generated_features, lambda_values
+        ) = self.update_actor(features, actor_params, actor_opt_state,
+                              model_params, critic_params, subkey)
+        critic_params, critic_report = self.update_critic(
+            generated_features, critic_params, critic_opt_state,
+            lambda_values)
+        report = {**model_report, **actor_report, **critic_report}
+        out = (model_params, model_opt_state, actor_params, actor_opt_state,
+               critic_params, critic_opt_state)
+        return out, report
 
     def update_model(
             self,
