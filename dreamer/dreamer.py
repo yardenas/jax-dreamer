@@ -86,7 +86,7 @@ class Dreamer:
     ) -> Tuple[jnp.ndarray, State]:
         filter_, *_ = self.model.apply
         key, subkey = jax.random.split(key)
-        observation = self.precision.cast_to_compute(observation)
+        observation = observation.astype(self.precision.compute_dtype)
         _, current_state = filter_(model_params, key, prev_state, prev_action,
                                    observation)
         features = jnp.concatenate(current_state, -1)[None]
