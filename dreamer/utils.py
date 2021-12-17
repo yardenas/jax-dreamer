@@ -9,6 +9,7 @@ import numpy as np
 import optax
 
 PRNGKey = jnp.ndarray
+LearningState = Tuple[hk.Params, optax.OptState, jmp.LossScale]
 
 
 class Learner:
@@ -17,6 +18,7 @@ class Learner:
             model: Union[hk.Transformed, hk.MultiTransformed],
             seed: PRNGKey,
             optimizer_config: dict,
+            precision=16,
             *input_example: Tuple
     ):
         self.optimizer = optax.chain(
@@ -26,10 +28,22 @@ class Learner:
         self.model = model
         self.params = self.model.init(seed, *input_example)
         self.opt_state = self.optimizer.init(self.params)
+        self.loss_scaler = {16: jmp.DynamicLossScale(2 ** 15),
+                            32: jmp.NoOpLossScale()}[precision]
 
     @property
     def apply(self) -> Union[Callable, Tuple[Callable]]:
         return self.model.apply
+
+    @property
+    def learning_state(self):
+        return self.params, self.opt_state, self.loss_scaler
+
+    @learning_state.setter
+    def learning_state(self, state):
+        self.params = state[0]
+        self.opt_state = state[1]
+        self.loss_scaler = state[2]
 
 
 def compute_lambda_values(

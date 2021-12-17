@@ -24,6 +24,7 @@ Action = jnp.ndarray
 Observation = np.ndarray
 Batch = Mapping[str, np.ndarray]
 tfd = tfp.distributions
+LearningState = utils.LearningState
 
 
 class Dreamer:
@@ -45,15 +46,16 @@ class Dreamer:
         self.rng_seq = hk.PRNGSequence(config.seed)
         dtype = precision.compute_dtype
         self.model = utils.Learner(
-            model, next(self.rng_seq), config.model_opt,
+            model, next(self.rng_seq), config.model_opt, config.precision,
             observation_space.sample()[None, None].astype(dtype),
             action_space.sample()[None, None].astype(dtype))
         self.precision = precision
         features_example = jnp.concatenate(self.init_state, -1)[None]
-        self.actor = utils.Learner(actor, next(self.rng_seq), config.actor_opt,
+        self.actor = utils.Learner(actor, next(self.rng_seq),
+                                   config.actor_opt, config.precision,
                                    features_example.astype(dtype))
         self.critic = utils.Learner(
-            critic, next(self.rng_seq), config.critic_opt,
+            critic, next(self.rng_seq), config.critic_opt, config.precision,
             features_example[None].astype(dtype))
         self.experience = experience
         self.logger = logger
@@ -115,13 +117,13 @@ class Dreamer:
         for batch in tqdm(self.experience.sample(next(self.rng_seq),
                                                  self.c.update_steps),
                           leave=False, total=self.c.update_steps):
-            (self.model.params, self.model.opt_state,
-             self.actor.params, self.actor.opt_state,
-             self.critic.params, self.critic.opt_state), report = self._update(
-                batch, self.model.params, self.model.opt_state,
-                self.actor.params, self.actor.opt_state,
-                self.critic.params, self.critic.opt_state,
-                next(self.rng_seq))
+            (self.model.learning_state,
+             self.actor.learning_state,
+             self.critic.learning_state,
+             report) = self._update(batch, self.model.learning_state,
+                                    self.actor.learning_state,
+                                    self.critic.learning_state,
+                                    next(self.rng_seq))
             # Average training metrics.
             for k, v in report.items():
                 reports[k] += float(v) / self.c.update_steps
@@ -131,40 +133,32 @@ class Dreamer:
     def _update(
             self,
             batch: Batch,
-            model_params: hk.Params,
-            model_opt_state: optax.OptState,
-            actor_params: hk.Params,
-            actor_opt_state: optax.OptState,
-            critic_params: hk.Params,
-            critic_opt_state: optax.OptState,
+            model_state: LearningState,
+            actor_state: LearningState,
+            critic_state: LearningState,
             key: PRNGKey,
-    ) -> Tuple[Tuple[hk.Params, optax.OptState,
-                     hk.Params, optax.OptState,
-                     hk.Params, optax.OptState],
-               dict]:
+    ) -> Tuple[LearningState, LearningState, LearningState, dict]:
         key, subkey = jax.random.split(key)
-        model_params, model_report, features = self.update_model(
-            batch, model_params, model_opt_state, subkey)
+        model_state, model_report, features = self.update_model(
+            batch, model_state, subkey)
         key, subkey = jax.random.split(key)
-        actor_params, actor_report, (
+        actor_state, actor_report, (
             generated_features, lambda_values
-        ) = self.update_actor(features, actor_params, actor_opt_state,
-                              model_params, critic_params, subkey)
+        ) = self.update_actor(features, actor_state, model_state[0],
+                              critic_state[0], subkey)
         critic_params, critic_report = self.update_critic(
-            generated_features, critic_params, critic_opt_state,
-            lambda_values)
+            generated_features, critic_state, lambda_values)
         report = {**model_report, **actor_report, **critic_report}
-        out = (model_params, model_opt_state, actor_params, actor_opt_state,
-               critic_params, critic_opt_state)
-        return out, report
+        return model_state, actor_state, critic_state, report
 
     def update_model(
             self,
             batch: Batch,
-            params: hk.Params,
-            opt_state: optax.OptState,
+            state: LearningState,
             key: PRNGKey
-    ) -> Tuple[hk.Params, dict, jnp.ndarray]:
+    ) -> Tuple[LearningState, dict, jnp.ndarray]:
+        params, opt_state, loss_scaler = state
+
         def loss(params: hk.Params) -> Tuple[float, dict]:
             _, _, infer, _ = self.model.apply
             outputs_infer = infer(params, key, batch['observation'],
@@ -177,27 +171,31 @@ class Dreamer:
             log_p_rews = reward.log_prob(batch['reward']).mean()
             log_p_terms = reward.log_prob(batch['terminal']).mean()
             loss_ = self.c.kl_scale * kl - log_p_obs - log_p_rews - log_p_terms
-            return loss_, {'agent/model/kl': kl,
-                           'agent/model/log_p_observation': -log_p_obs,
-                           'agent/model/log_p_reward': -log_p_rews,
-                           'agent/model/log_p_terminal': -log_p_terms,
-                           'features': features}
+            return loss_scaler.scale(loss_), {
+                'agent/model/kl': kl,
+                'agent/model/log_p_observation': -log_p_obs,
+                'agent/model/log_p_reward': -log_p_rews,
+                'agent/model/log_p_terminal': -log_p_terms,
+                'features': features
+            }
 
         grads, report = jax.grad(loss, has_aux=True)(params)
+        grads = loss_scaler.unscale(grads)
         updates, new_opt_state = self.model.optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
         report['agent/model/grads'] = optax.global_norm(grads)
-        return new_params, report, report.pop('features')
+        return (new_params, new_opt_state, loss_scaler
+                ), report, report.pop('features')
 
     def update_actor(
             self,
             features: jnp.ndarray,
-            params: hk.Params,
-            opt_state: optax.OptState,
+            state: LearningState,
             model_params: hk.Params,
             critic_params: hk.Params,
             key: PRNGKey
-    ) -> Tuple[hk.Params, dict, Tuple[jnp.ndarray, jnp.ndarray]]:
+    ) -> Tuple[LearningState, dict, Tuple[jnp.ndarray, jnp.ndarray]]:
+        params, opt_state, loss_scaler = state
         _, generate_experience, *_ = self.model.apply
         policy = self.actor
         critic = self.critic.apply
@@ -206,8 +204,7 @@ class Dreamer:
         )
         discount = jnp.concatenate([jnp.ones((1,)), discount])
 
-        def loss(params: hk.Params) -> Tuple[float,
-                                             Tuple[jnp.ndarray, jnp.ndarray]]:
+        def loss(params: hk.Params):
             flattened_features = features.reshape((-1, features.shape[-1]))
             generated_features, reward, terminal = generate_experience(
                 model_params, key, flattened_features, policy, params)
@@ -217,24 +214,24 @@ class Dreamer:
                                                         terminal.mean(),
                                                         self.c.discount,
                                                         self.c.lambda_)
-            return -(
-                    lambda_values * discount[:-1]
-            ).mean(), (generated_features, lambda_values)
+            loss_ = loss_scaler.scale((-lambda_values * discount[:-1]).mean())
+            return loss_, (generated_features, lambda_values)
 
         (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(params)
+        grads = loss_scaler.unscale(grads)
         updates, new_opt_state = self.actor.optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
-        return new_params, {'agent/actor/loss': loss_,
-                            'agent/actor/grads': optax.global_norm(grads)
-                            }, aux
+        return (new_params, new_opt_state, loss_scaler), {
+            'agent/actor/loss': loss_,
+            'agent/actor/grads': optax.global_norm(grads)}, aux
 
     def update_critic(
             self,
             features: jnp.ndarray,
-            params: hk.Params,
-            opt_state: optax.OptState,
+            state: LearningState,
             lambda_values: jnp.ndarray
-    ) -> Tuple[hk.Params, dict]:
+    ) -> Tuple[LearningState, dict]:
+        params, opt_state, loss_scaler = state
         discount = jnp.cumprod(
             self.c.discount * jnp.ones((self.c.imag_horizon - 1,))
         )
@@ -243,13 +240,16 @@ class Dreamer:
         def loss(params: hk.Params) -> float:
             values = self.critic.apply(params, features[:, :-1])
             targets = jax.lax.stop_gradient(lambda_values)
-            return -values.log_prob(targets * discount[:-1]).mean()
+            return loss_scaler.scale(
+                -values.log_prob(targets * discount[:-1]).mean())
 
         (loss_, grads) = jax.value_and_grad(loss)(params)
+        grads = loss_scaler.unscale(grads)
         updates, new_opt_state = self.critic.optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
-        return new_params, {'agent/critic/loss': loss_,
-                            'agent/critic/grads': optax.global_norm(grads)}
+        return (new_params, new_opt_state, loss_scaler), {
+            'agent/critic/loss': loss_,
+            'agent/critic/grads': optax.global_norm(grads)}
 
     def write(self, path):
         os.makedirs(path, exist_ok=True)
