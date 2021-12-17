@@ -17,9 +17,10 @@ class Encoder(hk.Module):
 
     def __call__(self, observation: jnp.ndarray) -> jnp.ndarray:
         def cnn(x):
+            kwargs = {'stride': 2, 'padding': 'VALID'}
             for i, kernel in enumerate(self._kernels):
                 depth = 2 ** i * self._depth
-                x = jnn.relu(hk.Conv2D(depth, kernel, 2, padding='VALID')(x))
+                x = jnn.relu(hk.Conv2D(depth, kernel, **kwargs)(x))
             return x
         cnn = hk.BatchApply(cnn)
         return hk.Flatten(2)(cnn(observation))
@@ -39,14 +40,14 @@ class Decoder(hk.Module):
         x = hk.Reshape((1, 1, 32 * self._depth), 2)(x)
 
         def transpose_cnn(x):
+            kwargs = {'stride': 2, 'padding': 'VALID'}
             for i, kernel in enumerate(self._kernels):
-                depth = 2 ** (len(self._kernels) - i - 2) * self._depth
                 if i != len(self._kernels) - 1:
-                    x = jnn.relu(hk.Conv2DTranspose(
-                        depth, kernel, 2, padding='VALID')(x))
+                    depth = 2 ** (len(self._kernels) - i - 2) * self._depth
+                    x = jnn.relu(hk.Conv2DTranspose(depth, kernel, **kwargs)(x))
                 else:
                     x = hk.Conv2DTranspose(
-                        self._output_shape[-1], kernel, 2, padding='VALID')(x)
+                        self._output_shape[-1], kernel, **kwargs)(x)
             return x
 
         out = hk.BatchApply(transpose_cnn)(x)

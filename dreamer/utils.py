@@ -77,9 +77,11 @@ def get_mixed_precision_policy(precision):
     return jmp.get_policy(policy)
 
 
-@functools.partial(jax.jit, static_argnums=3)
+@functools.partial(jax.jit, static_argnums=(3, 5))
 def evaluate_model(observations, actions, key, model, model_params, precision):
     length = min(len(observations) + 1, 50)
+    observations, actions = jax.tree_map(
+        lambda x: x.astype(precision.compute_type), (observations, actions))
     _, generate_sequence, infer, decode = model.apply
     key, subkey = jax.random.split(key)
     _, features, infered_decoded, *_ = infer(model_params,
