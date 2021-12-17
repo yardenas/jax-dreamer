@@ -41,7 +41,6 @@ class Decoder(hk.Module):
         def transpose_cnn(x):
             for i, kernel in enumerate(self._kernels):
                 depth = 2 ** (len(self._kernels) - i - 2) * self._depth
-                print(depth, kernel)
                 if i != len(self._kernels) - 1:
                     x = jnn.relu(hk.Conv2DTranspose(
                         depth, kernel, 2, padding='VALID')(x))

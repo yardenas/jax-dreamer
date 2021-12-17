@@ -112,8 +112,8 @@ class Dreamer:
 
     def update(self):
         reports = defaultdict(float)
-        for _ in tqdm(range(self.c.update_steps)):
-            batch = self.experience.sample(next(self.rng_seq))
+        for batch in tqdm(self.experience.sample(next(self.rng_seq),
+                                                 self.c.update_steps)):
             (self.model.params, self.model.opt_state,
              self.actor.params, self.actor.opt_state,
              self.critic.params, self.critic.opt_state), report = self._update(

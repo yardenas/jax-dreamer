@@ -1,4 +1,5 @@
-from typing import Mapping, Union
+import functools
+from typing import Mapping, Union, Iterator
 
 import jax
 import jax.numpy as jnp
@@ -60,36 +61,42 @@ class ReplayBuffer:
             else:
                 self.idx = int((self.idx + 1) % self.capacity)
 
-    def sample(self, seed) -> Batch:
+    def sample(self, seed, samples) -> Iterator[Batch]:
         # Algorithm:
         # 1. Sample episodes uniformly at random.
         # 2. Sample starting point uniformly and collect sequences from
         # episodes.
-
-        def sample_sequence(key: jnp.ndarray,
-                            episode_data: Mapping[str, np.ndarray],
-                            episode_length: np.ndarray
-                            ) -> Mapping[str, jnp.ndarray]:
-            start = jax.random.randint(
-                key, (), 0, episode_length - self._length + 1)
-            return jax.tree_map(
-                lambda x: jax.lax.dynamic_slice(
-                    x, (start,) + (0,) * (len(x.shape) - 1),
-                       (self._length,) + x.shape[1:]),
-                episode_data)
-
-        idxs = np.random.randint(0, self.idx, self._batch_size)
+        idxs = np.random.randint(0, self.idx, self._batch_size * samples)
         sampled_episods = jax.tree_map(lambda x: x[idxs], self.data)
-        sequence_keys = jax.random.split(seed, self._batch_size + 1)[1:]
-        sampled_sequences = jax.vmap(sample_sequence, (0, 0, 0))(
+        sequence_keys = jax.random.split(seed,
+                                         self._batch_size * samples + 1)[1:]
+        sampled_sequences = jax.vmap(self.sample_sequence, (0, 0, 0))(
             sequence_keys,
             sampled_episods,
             self.episode_lengths[idxs])
         sampled_sequences['observation'] = preprocess(
             sampled_sequences['observation'])
-        sampled_sequences = jax.tree_map(lambda x: x.astype(self.dtype),
-                                         sampled_sequences)
-        return jax.device_put(sampled_sequences, jax.devices()[0])
+
+        def standardize(item):
+            shape = item.shape
+            x = item.reshape((samples, self._batch_size) + shape[1:])
+            return x.astype(self.dtype)
+
+        sampled_sequences = jax.tree_map(standardize, sampled_sequences)
+        sampled_sequences = jax.device_put(sampled_sequences, jax.devices()[0])
+        for sample_id in range(samples):
+            yield {k: v[sample_id] for k, v in sampled_sequences.items()}
 
     def __len__(self):
         return self.episode_lengths.sum()
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def sample_sequence(self, key: jnp.ndarray,
+                        episode_data: Mapping[str, np.ndarray],
+                        episode_length: np.ndarray
+                        ) -> Mapping[str, jnp.ndarray]:
+        start = jax.random.randint(
+            key, (), 0, episode_length - self._length + 1)
+        return jax.tree_map(lambda x: jax.lax.dynamic_slice(
+                x, (start,) + (0,) * (len(x.shape) - 1),
+                   (self._length,) + x.shape[1:]), episode_data)
