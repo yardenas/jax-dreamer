@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 import haiku as hk
 import jax
@@ -52,9 +52,10 @@ class Posterior(hk.Module):
 
 
 def init_state(batch_size: int, stochastic_size: int,
-               deterministic_size: int) -> State:
-    return (jnp.zeros((batch_size, stochastic_size)),
-            jnp.zeros((batch_size, deterministic_size)))
+               deterministic_size: int, dtype: Optional[jnp.dtype] = jnp.float32
+               ) -> State:
+    return (jnp.zeros((batch_size, stochastic_size), dtype),
+            jnp.zeros((batch_size, deterministic_size), dtype))
 
 
 class RSSM(hk.Module):

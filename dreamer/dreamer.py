@@ -37,7 +37,7 @@ class Dreamer:
             experience: ReplayBuffer,
             logger: TrainingLogger,
             config,
-            precision=utils.get_mixed_precision_policy(32),
+            precision=utils.get_mixed_precision_policy(16),
             prefil_policy=None
     ):
         super(Dreamer, self).__init__()
@@ -48,6 +48,7 @@ class Dreamer:
             model, next(self.rng_seq), config.model_opt,
             observation_space.sample()[None, None].astype(dtype),
             action_space.sample()[None, None].astype(dtype))
+        self.precision = precision
         features_example = jnp.concatenate(self.init_state, -1)[None]
         self.actor = utils.Learner(actor, next(self.rng_seq), config.actor_opt,
                                    features_example.astype(dtype))
@@ -56,9 +57,9 @@ class Dreamer:
             features_example[None].astype(dtype))
         self.experience = experience
         self.logger = logger
-        self.state = (self.init_state, jnp.zeros(action_space.shape))
+        self.state = (self.init_state, jnp.zeros(action_space.shape,
+                                                 precision.compute_dtype))
         self.training_step = 0
-        self.precision = precision
         self._prefill_policy = prefil_policy or (
             lambda x: action_space.sample())
 
@@ -105,7 +106,8 @@ class Dreamer:
     @property
     def init_state(self):
         state = init_state(1, self.c.rssm['stochastic_size'],
-                           self.c.rssm['deterministic_size'])
+                           self.c.rssm['deterministic_size'],
+                           self.precision.compute_dtype)
         return jax.tree_map(lambda x: x.squeeze(0), state)
 
     def update(self):
