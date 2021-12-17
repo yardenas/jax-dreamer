@@ -66,7 +66,7 @@ class DenseDecoder(hk.Module):
         x = jnp.squeeze(x, axis=-1)
         dist = dict(
             normal=lambda mu: tfd.Normal(mu, 1.0),
-            bernoulli=lambda p: tfd.Bernoulli(p, dtype=jnp.float32)
+            bernoulli=lambda p: tfd.Bernoulli(p)
         )[self._dist]
         return tfd.Independent(dist(x), 0)
 
