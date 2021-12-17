@@ -77,6 +77,17 @@ def get_mixed_precision_policy(precision):
     return jmp.get_policy(policy)
 
 
+def nice_grads(grads, loss_scaler):
+    """
+    :param grads:
+    :param loss_scaler:
+    :return: only the finite subset of gradients.
+    """
+    grads_finite = jmp.all_finite(grads)
+    loss_scaler = loss_scaler.adjust(grads_finite)
+    return grads_finite, loss_scaler
+
+
 @functools.partial(jax.jit, static_argnums=(3, 5))
 def evaluate_model(observations, actions, key, model, model_params, precision):
     length = min(len(observations) + 1, 50)

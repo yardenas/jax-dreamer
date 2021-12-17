@@ -8,6 +8,7 @@ import gym
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import jmp
 import numpy as np
 import optax
 from tensorflow_probability.substrates import jax as tfp
@@ -181,8 +182,11 @@ class Dreamer:
 
         grads, report = jax.grad(loss, has_aux=True)(params)
         grads = loss_scaler.unscale(grads)
+        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
         updates, new_opt_state = self.model.optimizer.update(grads, opt_state)
-        new_params = optax.apply_updates(params, updates)
+        new_params = jmp.select_tree(grads,
+                                     optax.apply_updates(params, updates),
+                                     params)
         report['agent/model/grads'] = optax.global_norm(grads)
         return (new_params, new_opt_state, loss_scaler
                 ), report, report.pop('features')
@@ -219,8 +223,11 @@ class Dreamer:
 
         (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(params)
         grads = loss_scaler.unscale(grads)
+        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
         updates, new_opt_state = self.actor.optimizer.update(grads, opt_state)
-        new_params = optax.apply_updates(params, updates)
+        new_params = jmp.select_tree(grads,
+                                     optax.apply_updates(params, updates),
+                                     params)
         return (new_params, new_opt_state, loss_scaler), {
             'agent/actor/loss': loss_,
             'agent/actor/grads': optax.global_norm(grads)}, aux
@@ -245,8 +252,11 @@ class Dreamer:
 
         (loss_, grads) = jax.value_and_grad(loss)(params)
         grads = loss_scaler.unscale(grads)
+        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
         updates, new_opt_state = self.critic.optimizer.update(grads, opt_state)
-        new_params = optax.apply_updates(params, updates)
+        new_params = jmp.select_tree(grads,
+                                     optax.apply_updates(params, updates),
+                                     params)
         return (new_params, new_opt_state, loss_scaler), {
             'agent/critic/loss': loss_,
             'agent/critic/grads': optax.global_norm(grads)}
