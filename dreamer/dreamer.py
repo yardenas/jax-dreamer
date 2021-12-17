@@ -182,12 +182,13 @@ class Dreamer:
 
         grads, report = jax.grad(loss, has_aux=True)(params)
         grads = loss_scaler.unscale(grads)
-        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
+        grads = self.precision.cast_to_param(grads)
         updates, new_opt_state = self.model.optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
+        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
         new_params, new_opt_state = jmp.select_tree(grads,
-            (new_params, new_opt_state),
-            (params, opt_state))
+                                                    (new_params, new_opt_state),
+                                                    (params, opt_state))
         report['agent/model/grads'] = optax.global_norm(grads)
         return (new_params, new_opt_state, loss_scaler
                 ), report, report.pop('features')
@@ -224,9 +225,10 @@ class Dreamer:
 
         (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(params)
         grads = loss_scaler.unscale(grads)
-        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
+        grads = self.precision.cast_to_param(grads)
         updates, new_opt_state = self.actor.optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
+        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
         new_params, new_opt_state = jmp.select_tree(grads,
                                                     (new_params, new_opt_state),
                                                     (params, opt_state))
@@ -254,9 +256,10 @@ class Dreamer:
 
         (loss_, grads) = jax.value_and_grad(loss)(params)
         grads = loss_scaler.unscale(grads)
-        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
+        grads = self.precision.cast_to_param(grads)
         updates, new_opt_state = self.critic.optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
+        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
         new_params, new_opt_state = jmp.select_tree(grads,
                                                     (new_params, new_opt_state),
                                                     (params, opt_state))
