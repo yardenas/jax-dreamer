@@ -66,11 +66,13 @@ class ReplayBuffer:
         # 1. Sample episodes uniformly at random.
         # 2. Sample starting point uniformly and collect sequences from
         # episodes.
+        put_cpu = functools.partial(jax.device_put,
+                                    device=jax.devices('cpu')[0])
         idxs = np.random.randint(0, self.idx, self._batch_size * n_samples)
-        sampled_sequences = self.sample_sequences(
-            jax.device_put(self.data, jax.devices('cpu')[0]),
-            jax.device_put(self.episode_lengths, jax.devices('cpu')[0]),
-            idxs, n_samples, seed)
+        sampled_sequences = self.sample_sequences(put_cpu(self.data),
+                                                  put_cpu(self.episode_lengths),
+                                                  put_cpu(idxs),
+                                                  n_samples, seed)
         sampled_sequences['observation'] = preprocess(
             sampled_sequences['observation'])
 
@@ -80,9 +82,9 @@ class ReplayBuffer:
             return x.astype(self.dtype)
 
         sampled_sequences = jax.tree_map(standardize, sampled_sequences)
-        sampled_sequences = jax.device_put(sampled_sequences, jax.devices()[0])
         for sample_id in range(n_samples):
-            yield {k: v[sample_id] for k, v in sampled_sequences.items()}
+            yield {k: jax.device_put(v[sample_id], jax.devices()[0])
+                   for k, v in sampled_sequences.items()}
 
     def __len__(self):
         return self.episode_lengths.sum()
