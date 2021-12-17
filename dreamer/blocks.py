@@ -35,8 +35,8 @@ class Decoder(hk.Module):
         self._output_shape = output_shape
 
     def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
-        x = hk.Linear(32 * self._depth)(features)
-        x = hk.Reshape((-1, 1, 32 * self._depth), 2)(x)
+        x = hk.BatchApply(hk.Linear(32 * self._depth))(features)
+        x = hk.Reshape((1, 1, 32 * self._depth), 2)(x)
 
         def transpose_cnn(x):
             for i, kernel in enumerate(self._kernels):

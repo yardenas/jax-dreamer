@@ -25,8 +25,9 @@ class Prior(hk.Module):
         x = jnn.elu(hk.Linear(self.c['deterministic_size'])(cat))
         x, det = hk.GRU(self.c['deterministic_size'])(x, det)
         x = jnn.elu(hk.Linear(self.c['hidden'])(x))
-        mean = hk.Linear(self.c['stochastic_size'])(x)
-        stddev = jnn.softplus(hk.Linear(self.c['stochastic_size'])(x)) + 0.1
+        x = hk.Linear(self.c['stochastic_size'] * 2)(x)
+        mean, stddev = jnp.split(x, 2, -1)
+        stddev = jnn.softplus(stddev) + 0.1
         prior = tfd.MultivariateNormalDiag(mean, stddev)
         sample = prior.sample(seed=hk.next_rng_key())
         return prior, (sample, det)
@@ -42,8 +43,9 @@ class Posterior(hk.Module):
         stoch, det = prev_state
         cat = jnp.concatenate([det, observation], -1)
         x = jnn.elu(hk.Linear(self.c['hidden'])(cat))
-        mean = hk.Linear(self.c['stochastic_size'])(x)
-        stddev = jnn.softplus(hk.Linear(self.c['stochastic_size'])(x)) + 0.1
+        x = hk.Linear(self.c['stochastic_size'] * 2)(x)
+        mean, stddev = jnp.split(x, 2, -1)
+        stddev = jnn.softplus(stddev) + 0.1
         posterior = tfd.MultivariateNormalDiag(mean, stddev)
         sample = posterior.sample(seed=hk.next_rng_key())
         return posterior, (sample, det)
