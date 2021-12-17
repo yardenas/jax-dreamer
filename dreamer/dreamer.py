@@ -185,8 +185,8 @@ class Dreamer:
         grads = self.precision.cast_to_param(grads)
         updates, new_opt_state = self.model.optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
-        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
-        new_params, new_opt_state = jmp.select_tree(grads,
+        finite_grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
+        new_params, new_opt_state = jmp.select_tree(finite_grads,
                                                     (new_params, new_opt_state),
                                                     (params, opt_state))
         report['agent/model/grads'] = optax.global_norm(grads)
@@ -228,8 +228,8 @@ class Dreamer:
         grads = self.precision.cast_to_param(grads)
         updates, new_opt_state = self.actor.optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
-        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
-        new_params, new_opt_state = jmp.select_tree(grads,
+        finite_grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
+        new_params, new_opt_state = jmp.select_tree(finite_grads,
                                                     (new_params, new_opt_state),
                                                     (params, opt_state))
         return (new_params, new_opt_state, loss_scaler), {
@@ -259,8 +259,8 @@ class Dreamer:
         grads = self.precision.cast_to_param(grads)
         updates, new_opt_state = self.critic.optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
-        grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
-        new_params, new_opt_state = jmp.select_tree(grads,
+        finite_grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
+        new_params, new_opt_state = jmp.select_tree(finite_grads,
                                                     (new_params, new_opt_state),
                                                     (params, opt_state))
         return (new_params, new_opt_state, loss_scaler), {
