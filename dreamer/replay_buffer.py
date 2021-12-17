@@ -67,11 +67,10 @@ class ReplayBuffer:
         # 2. Sample starting point uniformly and collect sequences from
         # episodes.
         idxs = np.random.randint(0, self.idx, self._batch_size * n_samples)
-        sampled_episods = jax.tree_map(lambda x: x[idxs], self.data)
         sampled_sequences = self.sample_sequences(
-            jax.device_put(sampled_episods, jax.devices('cpu')[0]),
-            jax.device_put(self.episode_lengths[idxs], jax.devices('cpu')[0]),
-            n_samples, seed)
+            jax.device_put(self.data, jax.devices('cpu')[0]),
+            jax.device_put(self.episode_lengths, jax.devices('cpu')[0]),
+            idxs, n_samples, seed)
         sampled_sequences['observation'] = preprocess(
             sampled_sequences['observation'])
 
@@ -88,15 +87,17 @@ class ReplayBuffer:
     def __len__(self):
         return self.episode_lengths.sum()
 
-    @functools.partial(jax.jit, static_argnums=(0, 3))
-    def sample_sequences(self, episodes, episode_lengths, n_samples, seed):
+    @functools.partial(jax.jit, static_argnums=(0, 4))
+    def sample_sequences(self, episodes, episode_lengths, idxs,
+                         n_samples, seed):
+        sampled_episods = jax.tree_map(lambda x: x[idxs], episodes)
         sequence_keys = jax.random.split(
             seed,
             self._batch_size * n_samples + 1)[1:]
         sampled_sequences = jax.vmap(self.sample_sequence, (0, 0, 0))(
             sequence_keys,
-            episodes,
-            episode_lengths)
+            sampled_episods,
+            episode_lengths[idxs])
         return sampled_sequences
 
     def sample_sequence(self, key: jnp.ndarray,
