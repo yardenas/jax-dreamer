@@ -72,7 +72,7 @@ class WorldModel(hk.Module):
 
 
 class Actor(hk.Module):
-    def __init__(self, output_sizes: Sequence[int], min_stddev):
+    def __init__(self, output_sizes: Sequence[int], min_stddev: float):
         super().__init__()
         self.output_sizes = output_sizes
         self._min_stddev = min_stddev
@@ -80,7 +80,7 @@ class Actor(hk.Module):
     def __call__(self, observation):
         mlp = hk.nets.MLP(self.output_sizes, activation=jnn.elu)
         mu, stddev = jnp.split(mlp(observation), 2, -1)
-        init_std = np.log(np.exp(5.0) - 1)
+        init_std = np.log(np.exp(5.0) - 1.0).astype(stddev.dtype)
         stddev = jnn.softplus(stddev + init_std) + self._min_stddev
         multivariate_normal_diag = tfd.MultivariateNormalDiag(
             loc=5.0 * jnn.tanh(mu / 5.0),
