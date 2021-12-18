@@ -1,5 +1,5 @@
 import functools
-from typing import Callable, Tuple, Union
+from typing import Callable, Tuple, Union, Optional
 
 import haiku as hk
 import jax.numpy as jnp
@@ -18,7 +18,7 @@ class Learner:
             model: Union[hk.Transformed, hk.MultiTransformed],
             seed: PRNGKey,
             optimizer_config: dict,
-            precision=16,
+            precision: Optional[int] = 16,
             *input_example: Tuple
     ):
         self.optimizer = optax.chain(
@@ -28,7 +28,7 @@ class Learner:
         self.model = model
         self.params = self.model.init(seed, *input_example)
         self.opt_state = self.optimizer.init(self.params)
-        self.loss_scaler = {16: jmp.DynamicLossScale(jmp.half_dtype()(2 ** 15)),
+        self.loss_scaler = {16: jmp.DynamicLossScale(jmp.half_dtype()(2)),
                             32: jmp.NoOpLossScale()}[precision]
 
     @property
