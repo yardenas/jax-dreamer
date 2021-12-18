@@ -53,7 +53,6 @@ class ReplayBuffer:
                 'TimeLimit.truncated', False):
             observation = quantize(transition['next_observation'])
             self.data['observation'][self.idx, position] = observation
-
             # If finished an episode too shortly, discard it, since it cannot
             # be used for model learning.
             if position < self._length + 1:
