@@ -114,7 +114,7 @@ class ReplayBuffer:
         return {
             k: jax.lax.dynamic_slice(
                 v,
-                (start + shift.get(key, 1),) + (0,) * (len(v.shape) - 1),
+                (start + shift.get(k, 1),) + (0,) * (len(v.shape) - 1),
                 (self._length,) + v.shape[1:]
             ) for k, v in episode_data.items()
         }
