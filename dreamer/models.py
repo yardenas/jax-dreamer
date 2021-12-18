@@ -1,6 +1,7 @@
 from typing import Tuple, Sequence
 
 import haiku as hk
+import numpy as np
 import jax.nn as jnn
 import jax.numpy as jnp
 from tensorflow_probability.substrates import jax as tfp
@@ -79,14 +80,14 @@ class Actor(hk.Module):
     def __call__(self, observation):
         mlp = hk.nets.MLP(self.output_sizes, activation=jnn.elu)
         mu, stddev = jnp.split(mlp(observation), 2, -1)
-        stddev = jnn.softplus(stddev) + self._min_stddev
+        init_std = np.log(np.exp(5.0) - 1)
+        stddev = jnn.softplus(stddev + init_std) + self._min_stddev
         multivariate_normal_diag = tfd.MultivariateNormalDiag(
-            loc=mu,
+            loc=5.0 * jnn.tanh(mu / 5.0),
             scale_diag=stddev
         )
         # Squash actions to [-1, 1]
-        squashed = tfd.TransformedDistribution(
-            multivariate_normal_diag,
+        squashed = tfd.TransformedDistribution(multivariate_normal_diag,
             b.StableTanhBijector()
         )
         return b.SampleDist(squashed)
