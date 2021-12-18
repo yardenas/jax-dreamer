@@ -51,7 +51,7 @@ class Decoder(hk.Module):
             return x
 
         out = hk.BatchApply(transpose_cnn)(x)
-        return tfd.Independent(tfd.Normal(out, 1), len(self._output_shape))
+        return tfd.Independent(tfd.Normal(out, 1.0), len(self._output_shape))
 
 
 class DenseDecoder(hk.Module):

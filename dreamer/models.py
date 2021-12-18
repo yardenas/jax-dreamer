@@ -1,9 +1,9 @@
 from typing import Tuple, Sequence
 
 import haiku as hk
-import numpy as np
 import jax.nn as jnn
 import jax.numpy as jnp
+import numpy as np
 from tensorflow_probability.substrates import jax as tfp
 
 import dreamer.blocks as b
@@ -82,12 +82,12 @@ class Actor(hk.Module):
         mu, stddev = jnp.split(mlp(observation), 2, -1)
         init_std = np.log(np.exp(5.0) - 1.0).astype(stddev.dtype)
         stddev = jnn.softplus(stddev + init_std) + self._min_stddev
-        multivariate_normal_diag = tfd.MultivariateNormalDiag(
+        multivariate_normal_diag = tfd.Normal(
             loc=5.0 * jnn.tanh(mu / 5.0),
             scale_diag=stddev
         )
         # Squash actions to [-1, 1]
         squashed = tfd.TransformedDistribution(multivariate_normal_diag,
-            b.StableTanhBijector()
-        )
-        return b.SampleDist(squashed)
+                                               b.StableTanhBijector())
+        dist = tfd.Independent(squashed, 1)
+        return b.SampleDist(dist)

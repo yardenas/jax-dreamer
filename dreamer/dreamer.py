@@ -230,9 +230,11 @@ class Dreamer:
         new_params, new_opt_state = jmp.select_tree(finite_grads,
                                                     (new_params, new_opt_state),
                                                     (params, opt_state))
+        entropy = policy.apply(params, features[:, 0]).entropy(seed=key).mean()
         return (new_params, new_opt_state, loss_scaler), {
             'agent/actor/loss': loss_,
-            'agent/actor/grads': optax.global_norm(grads)}, aux
+            'agent/actor/grads': optax.global_norm(grads),
+            'agent/actor/entropy': entropy}, aux
 
     def update_critic(
             self,

@@ -46,7 +46,7 @@ class RenderedObservation(ObservationWrapper):
     def __init__(self, env, image_size, render_kwargs):
         super(RenderedObservation, self).__init__(env)
         self._size = image_size
-        self.observation_space = Box(0.0, 1.0, image_size + (3,),
+        self.observation_space = Box(-0.5, 0.5, image_size + (3,),
                                      np.float32)
         self._render_kwargs = render_kwargs
 
