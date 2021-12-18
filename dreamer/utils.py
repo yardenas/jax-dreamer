@@ -92,7 +92,7 @@ def nice_grads(grads, loss_scaler):
 def evaluate_model(observations, actions, key, model, model_params, precision):
     length = min(len(observations) + 1, 50)
     observations, actions = jax.tree_map(
-        lambda x: x.astype(precision.compute_type), (observations, actions))
+        lambda x: x.astype(precision.compute_dtype), (observations, actions))
     _, generate_sequence, infer, decode = model.apply
     key, subkey = jax.random.split(key)
     _, features, infered_decoded, *_ = infer(model_params,
