@@ -56,7 +56,7 @@ class ReplayBuffer:
 
             # If finished an episode too shortly, discard it, since it cannot
             # be used for model learning.
-            if position < self._length:
+            if position < self._length + 1:
                 self.episode_lengths[self.idx] = 0
             else:
                 self.idx = int((self.idx + 1) % self.capacity)
@@ -107,7 +107,14 @@ class ReplayBuffer:
                         episode_length: np.ndarray
                         ) -> Mapping[str, jnp.ndarray]:
         start = jax.random.randint(
-            key, (), 0, episode_length - self._length + 1)
-        return jax.tree_map(lambda x: jax.lax.dynamic_slice(
-            x, (start,) + (0,) * (len(x.shape) - 1),
-               (self._length,) + x.shape[1:]), episode_data)
+            key, (), 0, episode_length - self._length - 2)
+        shift = dict(action=0)
+        # Slice. Shift the actions one step backwards to match the filtering
+        # of the RSSM.
+        return {
+            k: jax.lax.dynamic_slice(
+                v,
+                (start + shift.get(key, 1),) + (0,) * (len(v.shape) - 1),
+                (self._length,) + v.shape[1:]
+            ) for k, v in episode_data.items()
+        }

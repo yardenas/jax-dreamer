@@ -47,6 +47,9 @@ class WorldModel(hk.Module):
         terminal = self.terminal(features)
         return features, reward, terminal
 
+    # TODO (yarden): Can we infer that state together with the help of
+    # the reward and terminal signals and not only the image observation?
+    # Maybe by concatenating them to the embeddings after the decoder.
     def observe_sequence(
             self,
             observations: Observation, actions: Action
