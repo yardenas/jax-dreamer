@@ -242,7 +242,7 @@ class Dreamer:
         params, opt_state, loss_scaler = state
 
         def loss(params: hk.Params) -> float:
-            values = self.critic.apply(params, features[:, :-1])
+            values = self.critic.apply(params, features[:, 1:])
             targets = jax.lax.stop_gradient(lambda_values)
             return loss_scaler.scale(-values.log_prob(targets).mean())
 
