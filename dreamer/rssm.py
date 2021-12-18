@@ -81,16 +81,14 @@ class RSSM(hk.Module):
         def vec(state):
             return jnp.concatenate(state, -1)
 
+        horizon = self.c.imag_horizon if actions is None else actions.shape[1]
         sequence = jnp.zeros(
-            (initial_features.shape[0],
-             self.c.imag_horizon,
+            (initial_features.shape[0], horizon,
              self.c.rssm['stochastic_size'] + self.c.rssm['deterministic_size'])
         )
         state = jnp.split(initial_features,
                           (self.c.rssm['stochastic_size'],), -1)
-        keys = hk.next_rng_keys(
-            self.c.imag_horizon if actions is None else actions.shape[1]
-        )
+        keys = hk.next_rng_keys(horizon)
         for t, key in enumerate(keys):
             action = actor.apply(
                 actor_params,
