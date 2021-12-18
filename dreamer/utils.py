@@ -52,16 +52,15 @@ def compute_lambda_values(
         terminals: jnp.ndarray,
         discount: float,
         lambda_: float) -> jnp.ndarray:
-    lambda_values = []
     v_lambda = next_values[:, -1] * (1.0 - terminals[:, -1])
     horizon = next_values.shape[1]
+    lamda_values = jnp.empty_like(next_values)
     for t in reversed(range(horizon)):
         td = rewards[:, t] + (1.0 - terminals[:, t]) * (
                 1.0 - lambda_) * discount * next_values[:, t]
         v_lambda = td + v_lambda * lambda_ * discount
-        lambda_values.append(v_lambda)
-    lambda_values.reverse()
-    return jnp.asarray(lambda_values).transpose()
+        lamda_values = lamda_values.at[:, t].set(v_lambda)
+    return lamda_values
 
 
 def preprocess(image):
