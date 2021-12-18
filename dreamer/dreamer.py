@@ -211,8 +211,9 @@ class Dreamer:
             flattened_features = features.reshape((-1, features.shape[-1]))
             generated_features, reward, terminal = generate_experience(
                 model_params, key, flattened_features, policy, params)
-            values = critic(critic_params, generated_features).mean()
-            lambda_values = utils.compute_lambda_values(values[:, 1:],
+            next_values = critic(critic_params,
+                                 generated_features[:, 1:]).mean()
+            lambda_values = utils.compute_lambda_values(next_values,
                                                         reward.mean(),
                                                         terminal.mean(),
                                                         self.c.discount,
@@ -242,7 +243,7 @@ class Dreamer:
         params, opt_state, loss_scaler = state
 
         def loss(params: hk.Params) -> float:
-            values = self.critic.apply(params, features[:, 1:])
+            values = self.critic.apply(params, features[:, :-1])
             targets = jax.lax.stop_gradient(lambda_values)
             return loss_scaler.scale(-values.log_prob(targets).mean())
 
