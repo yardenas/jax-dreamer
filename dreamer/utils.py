@@ -60,6 +60,7 @@ def compute_lambda_values(
                 1.0 - lambda_) * discount * next_values[:, t]
         v_lambda = td + v_lambda * lambda_ * discount
         lambda_values.append(v_lambda)
+    lambda_values.reverse()
     return jnp.asarray(lambda_values).transpose()
 
 
