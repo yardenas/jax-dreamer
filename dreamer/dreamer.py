@@ -125,7 +125,7 @@ class Dreamer:
                                     self.actor.learning_state,
                                     self.critic.learning_state,
                                     next(self.rng_seq))
-            # Average training metrics.
+            # Average training metrics across update steps.
             for k, v in report.items():
                 reports[k] += float(v) / self.c.update_steps
         self.logger.log_metrics(reports, self.training_step)
