@@ -107,7 +107,8 @@ def evaluate_model(observations, actions, key, model, model_params, precision):
         actions=actions[None, conditioning_length:])
     key, subkey = jax.random.split(key)
     generated_decoded = decode(model_params, subkey, generated)
-    out = (observations[None, :conditioning_length], infered_decoded.mean(),
-           generated_decoded.mean()[:, :conditioning_length])
+    out = (observations[None, conditioning_length:],
+           infered_decoded.mean()[:, conditioning_length:],
+           generated_decoded.mean())
     out = jax.tree_map(lambda x: ((x + 0.5) * 255).astype(jnp.uint8), out)
     return out
