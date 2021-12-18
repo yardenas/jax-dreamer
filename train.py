@@ -1,10 +1,11 @@
 import haiku as hk
+import jax.numpy as jnp
 import numpy as np
 
 import dreamer.env_wrappers as env_wrappers
 import dreamer.models as models
 import train_utils as train_utils
-from dreamer.blocks import DenseDecoder
+from dreamer.blocks import DenseDecoder, Decoder
 from dreamer.dreamer import Dreamer
 from dreamer.logger import TrainingLogger
 from dreamer.replay_buffer import ReplayBuffer
@@ -83,6 +84,8 @@ if __name__ == '__main__':
         hk.mixed_precision.set_policy(models.WorldModel, policy)
         hk.mixed_precision.set_policy(models.Actor, policy)
         hk.mixed_precision.set_policy(DenseDecoder, policy)
+        hk.mixed_precision.set_policy(Decoder, policy.with_output_dtype(
+            jnp.float32))
     environment = env_wrappers.make_env(config.task, config.time_limit,
                                         config.action_repeat, config.seed)
     logger = TrainingLogger(config.log_dir)
