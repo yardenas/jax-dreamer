@@ -206,10 +206,6 @@ class Dreamer:
         _, generate_experience, *_ = self.model.apply
         policy = self.actor
         critic = self.critic.apply
-        discount = jnp.cumprod(
-            self.c.discount * jnp.ones((self.c.imag_horizon - 1,))
-        )
-        discount = jnp.concatenate([jnp.ones((1,)), discount])
 
         def loss(params: hk.Params):
             flattened_features = features.reshape((-1, features.shape[-1]))
@@ -221,7 +217,7 @@ class Dreamer:
                                                         terminal.mean(),
                                                         self.c.discount,
                                                         self.c.lambda_)
-            loss_ = loss_scaler.scale((-lambda_values * discount[:-1]).mean())
+            loss_ = loss_scaler.scale((-lambda_values).mean())
             return loss_, (generated_features, lambda_values)
 
         (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(params)
@@ -244,16 +240,11 @@ class Dreamer:
             lambda_values: jnp.ndarray
     ) -> Tuple[LearningState, dict]:
         params, opt_state, loss_scaler = state
-        discount = jnp.cumprod(
-            self.c.discount * jnp.ones((self.c.imag_horizon - 1,))
-        )
-        discount = jnp.concatenate([jnp.ones((1,)), discount])
 
         def loss(params: hk.Params) -> float:
             values = self.critic.apply(params, features[:, :-1])
             targets = jax.lax.stop_gradient(lambda_values)
-            return loss_scaler.scale(
-                -values.log_prob(targets * discount[:-1]).mean())
+            return loss_scaler.scale(-values.log_prob(targets).mean())
 
         (loss_, grads) = jax.value_and_grad(loss)(params)
         grads = loss_scaler.unscale(grads)
