@@ -164,6 +164,7 @@ class Dreamer:
             _, _, infer, _ = self.model.apply
             outputs_infer = infer(params, key, batch['observation'],
                                   batch['action'])
+
             (prior,
              posterior), features, decoded, reward, terminal = outputs_infer
             kl = jnp.maximum(tfd.kl_divergence(posterior, prior).mean(),
@@ -171,7 +172,7 @@ class Dreamer:
             log_p_obs = decoded.log_prob(batch['observation'].astype(
                 jnp.float32)).mean()
             log_p_rews = reward.log_prob(batch['reward']).mean()
-            log_p_terms = reward.log_prob(batch['terminal']).mean()
+            log_p_terms = terminal.log_prob(batch['terminal']).mean()
             loss_ = self.c.kl_scale * kl - log_p_obs - log_p_rews - log_p_terms
             return loss_scaler.scale(loss_), {
                 'agent/model/kl': kl,

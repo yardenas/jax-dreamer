@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Sequence, Optional
 
 import haiku as hk
 import jax.nn as jnn
@@ -22,6 +22,7 @@ class Encoder(hk.Module):
                 depth = 2 ** i * self._depth
                 x = jnn.relu(hk.Conv2D(depth, kernel, **kwargs)(x))
             return x
+
         cnn = hk.BatchApply(cnn)
         return hk.Flatten(2)(cnn(observation))
 
@@ -55,8 +56,9 @@ class Decoder(hk.Module):
 
 
 class DenseDecoder(hk.Module):
-    def __init__(self, output_sizes: Sequence[int], dist: str):
-        super(DenseDecoder, self).__init__()
+    def __init__(self, output_sizes: Sequence[int], dist: str,
+                 name: Optional[str] = None):
+        super(DenseDecoder, self).__init__(name)
         self._output_size = output_sizes
         self._dist = dist
 

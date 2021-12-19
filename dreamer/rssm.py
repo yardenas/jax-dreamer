@@ -22,10 +22,10 @@ class Prior(hk.Module):
                  ) -> Tuple[tfd.MultivariateNormalDiag, State]:
         stoch, det = prev_state
         cat = jnp.concatenate([prev_action, stoch], -1)
-        x = jnn.elu(hk.Linear(self.c['deterministic_size'])(cat))
+        x = jnn.elu(hk.Linear(self.c['deterministic_size'], name='h1')(cat))
         x, det = hk.GRU(self.c['deterministic_size'])(x, det)
-        x = jnn.elu(hk.Linear(self.c['hidden'])(x))
-        x = hk.Linear(self.c['stochastic_size'] * 2)(x)
+        x = jnn.elu(hk.Linear(self.c['hidden'], name='h2')(x))
+        x = hk.Linear(self.c['stochastic_size'] * 2, name='h3')(x)
         mean, stddev = jnp.split(x, 2, -1)
         stddev = jnn.softplus(stddev) + 0.1
         prior = tfd.MultivariateNormalDiag(mean, stddev)
@@ -42,8 +42,8 @@ class Posterior(hk.Module):
                  ) -> Tuple[tfd.MultivariateNormalDiag, State]:
         stoch, det = prev_state
         cat = jnp.concatenate([det, observation], -1)
-        x = jnn.elu(hk.Linear(self.c['hidden'])(cat))
-        x = hk.Linear(self.c['stochastic_size'] * 2)(x)
+        x = jnn.elu(hk.Linear(self.c['hidden'], name='h1')(cat))
+        x = hk.Linear(self.c['stochastic_size'] * 2, name='h2')(x)
         mean, stddev = jnp.split(x, 2, -1)
         stddev = jnn.softplus(stddev) + 0.1
         posterior = tfd.MultivariateNormalDiag(mean, stddev)

@@ -22,9 +22,9 @@ class WorldModel(hk.Module):
                                  tuple(config.decoder['kernels']),
                                  observation_space.shape)
         self.reward = b.DenseDecoder(tuple(config.reward['output_sizes'])
-                                     + (1,), 'normal')
+                                     + (1,), 'normal', 'reward')
         self.terminal = b.DenseDecoder(tuple(config.terminal['output_sizes'])
-                                       + (1,), 'bernoulli')
+                                       + (1,), 'bernoulli', 'terminal')
 
     def __call__(
             self,
