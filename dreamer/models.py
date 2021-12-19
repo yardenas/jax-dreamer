@@ -78,7 +78,9 @@ class Actor(hk.Module):
     self._min_stddev = min_stddev
 
   def __call__(self, observation):
-    mlp = hk.nets.MLP(self.output_sizes, activation=jnn.elu)
+    mlp = hk.nets.MLP(self.output_sizes, activation=jnn.elu,
+                      w_init=hk.initializers.VarianceScaling(1.0, 'fan_avg',
+                                                             'uniform'))
     mu, stddev = jnp.split(mlp(observation), 2, -1)
     init_std = np.log(np.exp(5.0) - 1.0).astype(stddev.dtype)
     stddev = jnn.softplus(stddev + init_std) + self._min_stddev

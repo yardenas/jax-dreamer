@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Tuple, Optional
 
 import haiku as hk
@@ -12,6 +13,9 @@ State = Tuple[jnp.ndarray, jnp.ndarray]
 Action = jnp.ndarray
 Observation = jnp.ndarray
 
+Linear = partial(
+  hk.Linear, w_init=hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform'))
+
 
 class Prior(hk.Module):
   def __init__(self, config):
@@ -22,10 +26,14 @@ class Prior(hk.Module):
                ) -> Tuple[tfd.MultivariateNormalDiag, State]:
     stoch, det = prev_state
     cat = jnp.concatenate([prev_action, stoch], -1)
-    x = jnn.elu(hk.Linear(self.c['deterministic_size'], name='h1')(cat))
-    x, det = hk.GRU(self.c['deterministic_size'])(x, det)
-    x = jnn.elu(hk.Linear(self.c['hidden'], name='h2')(x))
-    x = hk.Linear(self.c['stochastic_size'] * 2, name='h3')(x)
+    x = jnn.elu(Linear(self.c['deterministic_size'], name='h1')(cat))
+    x, det = hk.GRU(
+      self.c['deterministic_size'],
+      w_i_init=hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform'),
+      w_h_init=hk.initializers.Orthogonal()
+    )(x, det)
+    x = jnn.elu(Linear(self.c['hidden'], name='h2')(x))
+    x = Linear(self.c['stochastic_size'] * 2, name='h3')(x)
     mean, stddev = jnp.split(x, 2, -1)
     stddev = jnn.softplus(stddev) + 0.1
     prior = tfd.MultivariateNormalDiag(mean, stddev)
@@ -42,8 +50,8 @@ class Posterior(hk.Module):
                ) -> Tuple[tfd.MultivariateNormalDiag, State]:
     stoch, det = prev_state
     cat = jnp.concatenate([det, observation], -1)
-    x = jnn.elu(hk.Linear(self.c['hidden'], name='h1')(cat))
-    x = hk.Linear(self.c['stochastic_size'] * 2, name='h2')(x)
+    x = jnn.elu(Linear(self.c['hidden'], name='h1')(cat))
+    x = Linear(self.c['stochastic_size'] * 2, name='h2')(x)
     mean, stddev = jnp.split(x, 2, -1)
     stddev = jnn.softplus(stddev) + 0.1
     posterior = tfd.MultivariateNormalDiag(mean, stddev)

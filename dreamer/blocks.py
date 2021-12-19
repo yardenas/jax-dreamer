@@ -17,7 +17,10 @@ class Encoder(hk.Module):
 
   def __call__(self, observation: jnp.ndarray) -> jnp.ndarray:
     def cnn(x):
-      kwargs = {'stride': 2, 'padding': 'VALID'}
+      kwargs = {
+        'stride': 2, 'padding': 'VALID',
+        'w_init': hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform')
+      }
       for i, kernel in enumerate(self._kernels):
         depth = 2 ** i * self._depth
         x = jnn.relu(hk.Conv2D(depth, kernel, **kwargs)(x))
@@ -37,11 +40,17 @@ class Decoder(hk.Module):
     self._output_shape = output_shape
 
   def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
-    x = hk.BatchApply(hk.Linear(32 * self._depth))(features)
+    x = hk.BatchApply(hk.Linear(
+      32 * self._depth,
+      w_init=hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform'))
+    )(features)
     x = hk.Reshape((1, 1, 32 * self._depth), 2)(x)
 
     def transpose_cnn(x):
-      kwargs = {'stride': 2, 'padding': 'VALID'}
+      kwargs = {
+        'stride': 2, 'padding': 'VALID',
+        'w_init': hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform')
+      }
       for i, kernel in enumerate(self._kernels):
         if i != len(self._kernels) - 1:
           depth = 2 ** (len(self._kernels) - i - 2) * self._depth
@@ -63,7 +72,10 @@ class DenseDecoder(hk.Module):
     self._dist = dist
 
   def __call__(self, features: jnp.ndarray):
-    mlp = hk.nets.MLP(self._output_size, activation=jnn.elu)
+    mlp = hk.nets.MLP(
+      self._output_size,
+      hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform'),
+      activation=jnn.elu)
     mlp = hk.BatchApply(mlp)
     x = mlp(features)
     x = jnp.squeeze(x, axis=-1)

@@ -30,10 +30,8 @@ class ReplayBuffer:
       'action': np.full(
         (capacity, max_episode_length) + action_space.shape, np.nan,
         np.float32),
-      'reward':
-        np.full((capacity, max_episode_length), np.nan, np.float32),
-      'terminal':
-        np.full((capacity, max_episode_length), np.nan, np.bool_)
+      'reward': np.full((capacity, max_episode_length), np.nan, np.float32),
+      'terminal': np.full((capacity, max_episode_length), np.nan, np.bool_)
     }
     self.episode_lengths = np.full((capacity,), 0, dtype=np.uint32)
     self.idx = 0
@@ -49,8 +47,8 @@ class ReplayBuffer:
         quantize(transition[key]))
       self.data[key][self.idx, position] = data
     self.episode_lengths[self.idx] += 1
-    if transition['terminal'] or transition['info'].get(
-        'TimeLimit.truncated', False):
+    if transition['terminal'] or transition['info'].get('TimeLimit.truncated',
+                                                        False):
       observation = quantize(transition['next_observation'])
       self.data['observation'][self.idx, position] = observation
       # If finished an episode too shortly, discard it, since it cannot

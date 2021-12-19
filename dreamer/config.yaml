@@ -19,7 +19,7 @@ defaults:
 
   # World Model
   rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 30}
-  model_opt: {lr: 6e-4, eps: 1e-8, clip: 100}
+  model_opt: {lr: 6e-4, eps: 1e-7, clip: 100}
   encoder: {depth: 32, kernels: [4, 4, 4, 4]}
   decoder: {depth: 32, kernels: [5, 5, 6, 6]}
   reward: {output_sizes: [400, 400]}
@@ -30,8 +30,8 @@ defaults:
   # Actor-Critic
   actor: {output_sizes: [400, 400, 400, 400], min_stddev: 1e-4}
   critic: {output_sizes: [400, 400, 400]}
-  actor_opt: {lr: 8e-5, eps: 1e-8, clip: 100}
-  critic_opt: {lr: 8e-5, eps: 1e-8, clip: 100}
+  actor_opt: {lr: 8e-5, eps: 1e-7, clip: 100}
+  critic_opt: {lr: 8e-5, eps: 1e-7, clip: 100}
   discount: 0.99
   lambda_: 0.95
   imag_horizon: 15
