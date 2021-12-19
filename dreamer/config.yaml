@@ -18,18 +18,18 @@ defaults:
   precision: 16
 
   # World Model
-  rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 32}
+  rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 30}
   model_opt: {lr: 6e-4, eps: 1e-8, clip: 100}
   encoder: {depth: 32, kernels: [4, 4, 4, 4]}
   decoder: {depth: 32, kernels: [5, 5, 6, 6]}
   reward: {output_sizes: [400, 400]}
-  terminal: {output_sizes: [400, 400]}
+  terminal: {output_sizes: [400, 400, 400]}
   free_kl: 3.0
   kl_scale: 1.0
 
   # Actor-Critic
   actor: {output_sizes: [400, 400, 400, 400], min_stddev: 1e-4}
-  critic: {output_sizes: [400, 400, 400, 400]}
+  critic: {output_sizes: [400, 400, 400]}
   actor_opt: {lr: 8e-5, eps: 1e-8, clip: 100}
   critic_opt: {lr: 8e-5, eps: 1e-8, clip: 100}
   discount: 0.99
@@ -40,9 +40,9 @@ debug:
   jit: False
   time_limit: 100
   training_steps_per_epoch: 200
-  evaluation_steps_per_epoch: 100
+  evaluation_steps_per_epoch: 0
   prefill: 100
   train_every: 100
   update_steps: 2
   render_episodes: 0
-  replay: {capacity: 10, batch: 5, sequence_length: 12}
+  replay: {capacity: 10, batch: 10, sequence_length: 8}
