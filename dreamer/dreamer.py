@@ -176,8 +176,8 @@ class Dreamer:
       loss_ = self.c.kl_scale * kl - log_p_obs - log_p_rews - log_p_terms
       return loss_scaler.scale(loss_), {
         'agent/model/kl': kl,
-        'agent/model/post_entropy': posterior.entropy(),
-        'agent/model/prior_entropy': prior.entropy(),
+        'agent/model/post_entropy': posterior.entropy().mean(),
+        'agent/model/prior_entropy': prior.entropy().mean(),
         'agent/model/log_p_observation': -log_p_obs,
         'agent/model/log_p_reward': -log_p_rews,
         'agent/model/log_p_terminal': -log_p_terms,
