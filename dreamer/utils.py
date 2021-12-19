@@ -28,7 +28,7 @@ class Learner:
         self.model = model
         self.params = self.model.init(seed, *input_example)
         self.opt_state = self.optimizer.init(self.params)
-        self.loss_scaler = {16: jmp.DynamicLossScale(jmp.half_dtype()(2)),
+        self.loss_scaler = {16: jmp.DynamicLossScale(jmp.half_dtype()(2 ** 15)),
                             32: jmp.NoOpLossScale()}[precision]
 
     @property
