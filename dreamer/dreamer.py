@@ -212,7 +212,8 @@ class Dreamer:
                                                   terminal.mean(),
                                                   self.c.discount,
                                                   self.c.lambda_)
-      loss_ = loss_scaler.scale((-lambda_values).mean())
+      discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
+      loss_ = loss_scaler.scale((-lambda_values * discount).mean())
       return loss_, (generated_features, lambda_values)
 
     (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(params)
@@ -233,7 +234,8 @@ class Dreamer:
     def loss(params: hk.Params) -> float:
       values = self.critic.apply(params, features[:, :-1])
       targets = jax.lax.stop_gradient(lambda_values)
-      return loss_scaler.scale(-values.log_prob(targets).mean())
+      discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
+      return loss_scaler.scale(-values.log_prob(targets * discount).mean())
 
     (loss_, grads) = jax.value_and_grad(loss)(params)
     new_state = self.critic.grad_step(grads, state)

@@ -93,6 +93,12 @@ def get_mixed_precision_policy(precision):
   return jmp.get_policy(policy)
 
 
+def discount(factor, length):
+  d = np.cumprod(factor * jnp.ones((length - 1,)))
+  d = np.concatenate([jnp.ones((1,)), d])
+  return d
+
+
 @functools.partial(jax.jit, static_argnums=(3, 5))
 def evaluate_model(observations, actions, key, model, model_params, precision):
   length = min(len(observations) + 1, 50)
