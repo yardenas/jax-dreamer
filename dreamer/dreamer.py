@@ -8,7 +8,6 @@ import gym
 import haiku as hk
 import jax
 import jax.numpy as jnp
-import jmp
 import numpy as np
 import optax
 from tensorflow_probability.substrates import jax as tfp
@@ -185,17 +184,9 @@ class Dreamer:
       }
 
     grads, report = jax.grad(loss, has_aux=True)(params)
-    grads = loss_scaler.unscale(grads)
-    grads = self.precision.cast_to_param(grads)
-    updates, new_opt_state = self.model.optimizer.update(grads, opt_state)
-    new_params = optax.apply_updates(params, updates)
-    finite_grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
-    new_params, new_opt_state = jmp.select_tree(finite_grads,
-                                                (new_params, new_opt_state),
-                                                (params, opt_state))
+    new_state = self.model.grad_step(grads, state)
     report['agent/model/grads'] = optax.global_norm(grads)
-    return (new_params, new_opt_state, loss_scaler
-            ), report, report.pop('features')
+    return new_state, report, report.pop('features')
 
   def update_actor(
       self,
@@ -225,19 +216,11 @@ class Dreamer:
       return loss_, (generated_features, lambda_values)
 
     (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(params)
-    grads = loss_scaler.unscale(grads)
-    grads = self.precision.cast_to_param(grads)
-    updates, new_opt_state = self.actor.optimizer.update(grads, opt_state)
-    new_params = optax.apply_updates(params, updates)
-    finite_grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
-    new_params, new_opt_state = jmp.select_tree(finite_grads,
-                                                (new_params, new_opt_state),
-                                                (params, opt_state))
+    new_state = self.actor.grad_step(grads, state)
     entropy = policy.apply(params, features[:, 0]).entropy(seed=key).mean()
-    return (new_params, new_opt_state, loss_scaler), {
-      'agent/actor/loss': loss_,
-      'agent/actor/grads': optax.global_norm(grads),
-      'agent/actor/entropy': entropy}, aux
+    return new_state, {'agent/actor/loss': loss_scaler.unscale([loss_]),
+                       'agent/actor/grads': optax.global_norm(grads),
+                       'agent/actor/entropy': entropy}, aux
 
   def update_critic(
       self,
@@ -253,17 +236,9 @@ class Dreamer:
       return loss_scaler.scale(-values.log_prob(targets).mean())
 
     (loss_, grads) = jax.value_and_grad(loss)(params)
-    grads = loss_scaler.unscale(grads)
-    grads = self.precision.cast_to_param(grads)
-    updates, new_opt_state = self.critic.optimizer.update(grads, opt_state)
-    new_params = optax.apply_updates(params, updates)
-    finite_grads, loss_scaler = utils.nice_grads(grads, loss_scaler)
-    new_params, new_opt_state = jmp.select_tree(finite_grads,
-                                                (new_params, new_opt_state),
-                                                (params, opt_state))
-    return (new_params, new_opt_state, loss_scaler), {
-      'agent/critic/loss': loss_,
-      'agent/critic/grads': optax.global_norm(grads)}
+    new_state = self.critic.grad_step(grads, state)
+    return new_state, {'agent/critic/loss': loss_scaler.unscale([loss_]),
+                       'agent/critic/grads': optax.global_norm(grads)}
 
   def write(self, path):
     os.makedirs(path, exist_ok=True)

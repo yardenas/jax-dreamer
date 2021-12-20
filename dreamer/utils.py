@@ -1,5 +1,5 @@
 import functools
-from typing import Callable, Tuple, Union, Optional
+from typing import Callable, Tuple, Union
 
 import haiku as hk
 import jax.numpy as jnp
@@ -18,7 +18,7 @@ class Learner:
       model: Union[hk.Transformed, hk.MultiTransformed],
       seed: PRNGKey,
       optimizer_config: dict,
-      precision: Optional[int] = 16,
+      precision: jmp.Policy,
       *input_example: Tuple
   ):
     self.optimizer = optax.chain(
@@ -28,8 +28,11 @@ class Learner:
     self.model = model
     self.params = self.model.init(seed, *input_example)
     self.opt_state = self.optimizer.init(self.params)
-    self.loss_scaler = {16: jmp.DynamicLossScale(jmp.half_dtype()(2 ** 15)),
-                        32: jmp.NoOpLossScale()}[precision]
+    self.loss_scaler = {
+      jnp.float16: jmp.DynamicLossScale(jmp.half_dtype()(2 ** 15)),
+      jnp.float32: jmp.NoOpLossScale()
+    }[precision.compute_dtype]
+    self.precision = precision
 
   @property
   def apply(self) -> Union[Callable, Tuple[Callable]]:
@@ -44,6 +47,19 @@ class Learner:
     self.params = state[0]
     self.opt_state = state[1]
     self.loss_scaler = state[2]
+
+  def grad_step(self, grads, state: LearningState):
+    params, opt_state, loss_scaler = state
+    grads = loss_scaler.unscale(grads)
+    grads = self.precision.cast_to_param(grads)
+    updates, new_opt_state = self.optimizer.update(grads, opt_state)
+    new_params = optax.apply_updates(params, updates)
+    grads_finite = jmp.all_finite(grads)
+    loss_scaler = loss_scaler.adjust(grads_finite)
+    new_params, new_opt_state = jmp.select_tree(grads_finite,
+                                                (new_params, new_opt_state),
+                                                (params, opt_state))
+    return new_params, new_opt_state, loss_scaler
 
 
 def compute_lambda_values(
@@ -75,17 +91,6 @@ def get_mixed_precision_policy(precision):
   policy = ('params=float32,compute=float' + str(precision) +
             ',output=float' + str(precision))
   return jmp.get_policy(policy)
-
-
-def nice_grads(grads, loss_scaler):
-  """
-  :param grads:
-  :param loss_scaler:
-  :return: only the finite subset of gradients.
-  """
-  grads_finite = jmp.all_finite(grads)
-  loss_scaler = loss_scaler.adjust(grads_finite)
-  return grads_finite, loss_scaler
 
 
 @functools.partial(jax.jit, static_argnums=(3, 5))
