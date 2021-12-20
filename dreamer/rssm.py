@@ -1,4 +1,3 @@
-from functools import partial
 from typing import Tuple, Optional
 
 import haiku as hk
@@ -7,14 +6,13 @@ import jax.nn as jnn
 import jax.numpy as jnp
 from tensorflow_probability.substrates import jax as tfp
 
+from dreamer.utils import initializer
+
 tfd = tfp.distributions
 
 State = Tuple[jnp.ndarray, jnp.ndarray]
 Action = jnp.ndarray
 Observation = jnp.ndarray
-
-Linear = partial(
-  hk.Linear, w_init=hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform'))
 
 
 class Prior(hk.Module):
@@ -26,14 +24,18 @@ class Prior(hk.Module):
                ) -> Tuple[tfd.MultivariateNormalDiag, State]:
     stoch, det = prev_state
     cat = jnp.concatenate([prev_action, stoch], -1)
-    x = jnn.elu(Linear(self.c['deterministic_size'], name='h1')(cat))
+    x = jnn.elu(hk.Linear(self.c['deterministic_size'],
+                          name='h1',
+                          w_init=initializer(self.c.initialization))(cat))
     x, det = hk.GRU(
       self.c['deterministic_size'],
       w_i_init=hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform'),
       w_h_init=hk.initializers.Orthogonal()
     )(x, det)
-    x = jnn.elu(Linear(self.c['hidden'], name='h2')(x))
-    x = Linear(self.c['stochastic_size'] * 2, name='h3')(x)
+    x = jnn.elu(hk.Linear(self.c['hidden'], name='h2',
+                          w_init=initializer(self.c.initialization))(x))
+    x = hk.Linear(self.c['stochastic_size'] * 2, name='h3',
+                  w_init=initializer(self.c.initialization))(x)
     mean, stddev = jnp.split(x, 2, -1)
     stddev = jnn.softplus(stddev) + 0.1
     prior = tfd.MultivariateNormalDiag(mean, stddev)
@@ -50,8 +52,10 @@ class Posterior(hk.Module):
                ) -> Tuple[tfd.MultivariateNormalDiag, State]:
     stoch, det = prev_state
     cat = jnp.concatenate([det, observation], -1)
-    x = jnn.elu(Linear(self.c['hidden'], name='h1')(cat))
-    x = Linear(self.c['stochastic_size'] * 2, name='h2')(x)
+    x = jnn.elu(hk.Linear(self.c['hidden'], name='h1',
+                          w_init=initializer(self.c.initialization))(cat))
+    x = hk.Linear(self.c['stochastic_size'] * 2, name='h2',
+                  w_init=initializer(self.c.initialization))(x)
     mean, stddev = jnp.split(x, 2, -1)
     stddev = jnn.softplus(stddev) + 0.1
     posterior = tfd.MultivariateNormalDiag(mean, stddev)

@@ -5,21 +5,25 @@ import jax.nn as jnn
 import jax.numpy as jnp
 from tensorflow_probability.substrates import jax as tfp
 
+from dreamer.utils import initializer
+
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
 
 class Encoder(hk.Module):
-  def __init__(self, depth: int, kernels: Sequence[int]):
+  def __init__(self, depth: int, kernels: Sequence[int],
+               initialization: str):
     super(Encoder, self).__init__()
     self._depth = depth
     self._kernels = kernels
+    self._initialization = initialization
 
   def __call__(self, observation: jnp.ndarray) -> jnp.ndarray:
     def cnn(x):
       kwargs = {
         'stride': 2, 'padding': 'VALID',
-        'w_init': hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform')
+        'w_init': initializer(self._initialization)
       }
       for i, kernel in enumerate(self._kernels):
         depth = 2 ** i * self._depth
@@ -33,23 +37,25 @@ class Encoder(hk.Module):
 class Decoder(hk.Module):
   def __init__(self, depth: int,
                kernels: Sequence[int],
-               output_shape: Sequence[int]):
+               output_shape: Sequence[int],
+               initialization: str):
     super(Decoder, self).__init__()
     self._depth = depth
     self._kernels = kernels
     self._output_shape = output_shape
+    self._initialization = initialization
 
   def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
     x = hk.BatchApply(hk.Linear(
       32 * self._depth,
-      w_init=hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform'))
-    )(features)
+      w_init=initializer(self._initialization)
+    )(features))
     x = hk.Reshape((1, 1, 32 * self._depth), 2)(x)
 
     def transpose_cnn(x):
       kwargs = {
         'stride': 2, 'padding': 'VALID',
-        'w_init': hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform')
+        'w_init': initializer(self._initialization)
       }
       for i, kernel in enumerate(self._kernels):
         if i != len(self._kernels) - 1:
@@ -66,16 +72,15 @@ class Decoder(hk.Module):
 
 class DenseDecoder(hk.Module):
   def __init__(self, output_sizes: Sequence[int], dist: str,
-               name: Optional[str] = None):
+               initialization: str, name: Optional[str] = None):
     super(DenseDecoder, self).__init__(name)
     self._output_size = output_sizes
     self._dist = dist
+    self._initialization = initialization
 
   def __call__(self, features: jnp.ndarray):
-    mlp = hk.nets.MLP(
-      self._output_size,
-      hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform'),
-      activation=jnn.elu)
+    mlp = hk.nets.MLP(self._output_size, initializer(self._initialization),
+                      activation=jnn.elu)
     mlp = hk.BatchApply(mlp)
     x = mlp(features)
     x = jnp.squeeze(x, axis=-1)

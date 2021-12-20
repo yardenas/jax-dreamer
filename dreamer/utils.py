@@ -99,6 +99,13 @@ def discount(factor, length):
   return d
 
 
+def initializer(name: str) -> hk.initializers.Initializer:
+  return {
+    'glorot': hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform'),
+    'he': hk.initializers.VarianceScaling(2.0, 'fan_in', 'uniform')
+  }[name]
+
+
 @functools.partial(jax.jit, static_argnums=(3, 5))
 def evaluate_model(observations, actions, key, model, model_params, precision):
   length = min(len(observations) + 1, 50)
