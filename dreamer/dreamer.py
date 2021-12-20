@@ -219,7 +219,7 @@ class Dreamer:
     (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(params)
     new_state = self.actor.grad_step(grads, state)
     entropy = policy.apply(params, features[:, 0]).entropy(seed=key).mean()
-    return new_state, {'agent/actor/loss': loss_scaler.unscale([loss_]),
+    return new_state, {'agent/actor/loss': loss_scaler.unscale(loss_),
                        'agent/actor/grads': optax.global_norm(grads),
                        'agent/actor/entropy': entropy}, aux
 
@@ -239,7 +239,7 @@ class Dreamer:
 
     (loss_, grads) = jax.value_and_grad(loss)(params)
     new_state = self.critic.grad_step(grads, state)
-    return new_state, {'agent/critic/loss': loss_scaler.unscale([loss_]),
+    return new_state, {'agent/critic/loss': loss_scaler.unscale(loss_),
                        'agent/critic/grads': optax.global_norm(grads)}
 
   def write(self, path):
