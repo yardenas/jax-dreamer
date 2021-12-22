@@ -29,7 +29,7 @@ class Prior(hk.Module):
                           w_init=initializer(self.c.initialization))(cat))
     x, det = hk.GRU(
       self.c['deterministic_size'],
-      w_i_init=hk.initializers.VarianceScaling(1.0, 'fan_avg', 'uniform'),
+      w_i_init=initializer(self.c.initialization),
       w_h_init=hk.initializers.Orthogonal()
     )(x, det)
     x = jnn.elu(hk.Linear(self.c['hidden'], name='h2',
