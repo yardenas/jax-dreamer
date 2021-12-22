@@ -94,8 +94,8 @@ def get_mixed_precision_policy(precision):
 
 
 def discount(factor, length):
-  d = np.cumprod(factor * jnp.ones((length - 1,)))
-  d = np.concatenate([jnp.ones((1,)), d])
+  d = np.cumprod(factor * np.ones((length - 1,)))
+  d = np.concatenate([np.ones((1,)), d])
   return d
 
 
