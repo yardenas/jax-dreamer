@@ -119,7 +119,7 @@ class Dreamer:
       (self.model.learning_state,
        self.actor.learning_state,
        self.critic.learning_state,
-       report) = self._update(batch, self.model.learning_state,
+       report) = self._update(dict(batch), self.model.learning_state,
                               self.actor.learning_state,
                               self.critic.learning_state,
                               next(self.rng_seq))
