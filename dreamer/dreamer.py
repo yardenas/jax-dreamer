@@ -44,18 +44,18 @@ class Dreamer:
     super(Dreamer, self).__init__()
     self.c = config
     self.rng_seq = hk.PRNGSequence(config.seed)
+    self.precision = precision
     dtype = precision.compute_dtype
     self.model = utils.Learner(
-      model, next(self.rng_seq), config.model_opt, config.precision,
+      model, next(self.rng_seq), config.model_opt, precision,
       observation_space.sample()[None, None].astype(dtype),
       action_space.sample()[None, None].astype(dtype))
-    self.precision = precision
     features_example = jnp.concatenate(self.init_state, -1)[None]
     self.actor = utils.Learner(actor, next(self.rng_seq),
-                               config.actor_opt, config.precision,
+                               config.actor_opt, precision,
                                features_example.astype(dtype))
     self.critic = utils.Learner(
-      critic, next(self.rng_seq), config.critic_opt, config.precision,
+      critic, next(self.rng_seq), config.critic_opt, precision,
       features_example[None].astype(dtype))
     self.experience = experience
     self.logger = logger
@@ -100,10 +100,10 @@ class Dreamer:
 
   def observe(self, transition):
     self.training_step += self.c.action_repeat
-    self.experience.store(transition)
     if transition['terminal'] or transition['info'].get('TimeLimit.truncated',
                                                         False):
       self.state = (self.init_state, jnp.zeros_like(self.state[-1]))
+    self.experience.store(transition)
 
   @property
   def init_state(self):
