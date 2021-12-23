@@ -1,10 +1,14 @@
 from typing import Tuple, Sequence, Optional
 
+import numpy as np
+
 import haiku as hk
 import jax
 import jax.nn as jnn
 import jax.numpy as jnp
 from tensorflow_probability.substrates import jax as tfp
+
+from gym.spaces import Space
 
 import dreamer.blocks as b
 from dreamer.rssm import State, Action, Observation
@@ -24,14 +28,18 @@ class BayesianWorldModel(hk.Module):
         self.rssm_posterior = b.MeanField(rssm_params, **config.rssm_posterior)
         self.rssm_prior = b.MeanField(rssm_params, **config.rssm_prior)
         self.encoder = b.Encoder(config.encoder['depth'],
-                                 tuple(config.encoder['kernels']))
+                                 tuple(config.encoder['kernels']),
+                                 config.initialization)
         self.decoder = b.Decoder(config.decoder['depth'],
                                  tuple(config.decoder['kernels']),
-                                 observation_space.shape)
+                                 observation_space.shape,
+                                 config.initialization)
         self.reward = b.DenseDecoder(tuple(config.reward['output_sizes'])
-                                     + (1,), 'normal')
+                                     + (1,), 'normal',
+                                     config.initialization)
         self.terminal = b.DenseDecoder(tuple(config.terminal['output_sizes'])
-                                       + (1,), 'bernoulli')
+                                       + (1,), 'bernoulli',
+                                       config.initialization)
         self._posterior_samples = config.rssm_posterior_samples
 
     def __call__(

@@ -1,66 +1,70 @@
 import haiku as hk
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 import dreamer.env_wrappers as env_wrappers
 import dreamer.models as models
 import train_utils as train_utils
-from dreamer.blocks import DenseDecoder
+from dreamer.blocks import DenseDecoder, Encoder, Decoder
 from dreamer.dreamer import Dreamer
 from dreamer.logger import TrainingLogger
 from dreamer.replay_buffer import ReplayBuffer
+from dreamer.rssm import RSSM
+from dreamer.utils import get_mixed_precision_policy
 
 
 def create_rssm(config, observation_space, action_space):
-    def rssm():
-        _rssm = RSSM(config)
+  def rssm():
+    _rssm = RSSM(config)
 
-        def filter_(prev_state, prev_action, observation):
-            return _rssm(prev_state, prev_action, observation)
+    def filter_(prev_state, prev_action, observation):
+      return _rssm(prev_state, prev_action, observation)
 
-        def generate_sequence(initial_state, policy,
-                              policy_params, actions=None):
-            return _rssm.generate_sequence(initial_state, policy,
-                                           policy_params, actions)
+    def generate_sequence(initial_state, policy,
+                          policy_params, actions=None):
+      return _rssm.generate_sequence(initial_state, policy,
+                                     policy_params, actions)
 
-        def observe_sequence(observations, actions):
-            return _rssm.observe_sequence(observations, actions)
+    def observe_sequence(observations, actions):
+      return _rssm.observe_sequence(observations, actions)
 
-        def init(observation, action):
-            return _rssm.observe_sequence(observation, action)
+    def init(observation, action):
+      return _rssm.observe_sequence(observation, action)
 
-        return init, (filter_, generate_sequence, observe_sequence)
+    return init, (filter_, generate_sequence, observe_sequence)
 
-    # Annoyingly creating an encoder that encodes *dummy* images into embeddings
-    # to initialize the RSSM.
-    _rssm = hk.multi_transform(rssm)
-    dummy_encoder = hk.without_apply_rng(hk.transform(
-        lambda x: Encoder(config.encoder['depth'],
-                          tuple(config.encoder['kernels'])
-                          )(x))
-    )
-    key = jax.random.PRNGKey(config.seed)
-    sample = observation_space.sample()[None, None]
-    dummy_encoder_ps = dummy_encoder.init(key, sample)
-    rssm_embeddings = dummy_encoder.apply(dummy_encoder_ps, sample)
-    rssm_params = _rssm.init(key, rssm_embeddings,
-                             action_space.sample()[None, None])
-    return _rssm, rssm_params
+  # Annoyingly creating an encoder that encodes *dummy* images into embeddings
+  # to initialize the RSSM.
+  _rssm = hk.multi_transform(rssm)
+  dummy_encoder = hk.without_apply_rng(hk.transform(
+    lambda x: Encoder(config.encoder['depth'],
+                      tuple(config.encoder['kernels']),
+                      config.initialization)(x))
+  )
+  key = jax.random.PRNGKey(config.seed)
+  sample = observation_space.sample()[None, None]
+  dummy_encoder_ps = dummy_encoder.init(key, sample)
+  rssm_embeddings = dummy_encoder.apply(dummy_encoder_ps, sample)
+  rssm_params = _rssm.init(key, rssm_embeddings,
+                           action_space.sample()[None, None])
+  return _rssm, rssm_params
 
 
 def create_model(config, observation_space, action_space):
-    rssm, rssm_params = create_rssm(config, observation_space, action_space)
+  rssm, rssm_params = create_rssm(config, observation_space, action_space)
 
   def model():
-        _model = models.WorldModel(observation_space, config)
-            observation_space, rssm, rssm_params, config)
+    _model = models.BayesianWorldModel(observation_space, rssm, rssm_params,
+                                       config)
 
     def filter_state(prev_state, prev_action, observation):
       return _model(prev_state, prev_action, observation)
 
     def generate_sequence(initial_state, policy,
-                              policy_params, actions=None):
+                          policy_params, actions=None):
       return _model.generate_sequence(initial_state, policy,
-                                            policy_params, actions)
+                                      policy_params, actions)
 
     def observe_sequence(observations, actions):
       return _model.observe_sequence(observations, actions)
@@ -68,17 +72,17 @@ def create_model(config, observation_space, action_space):
     def decode(feature):
       return _model.decode(feature)
 
-        def kl():
-            return _model.kl()
+    def kl():
+      return _model.kl()
 
-        def posterior():
-            return _model.rssm_posterior()
+    def posterior():
+      return _model.rssm_posterior()
 
     def init(observations, actions):
       return _model.observe_sequence(observations, actions)
 
     return init, (filter_state, generate_sequence, observe_sequence,
-                      decode)
+                  decode, kl, posterior)
 
   return hk.multi_transform(model)
 
@@ -112,9 +116,8 @@ def make_agent(config, environment, logger):
   precision_policy = get_mixed_precision_policy(config.precision)
   agent = Dreamer(environment.observation_space,
                   environment.action_space,
-                    create_model(config,
-                    create_model(config, environment.observation_space),
-                                 environment.action_space),
+                  create_model(config, environment.observation_space,
+                               environment.action_space),
                   create_actor(config, environment.action_space),
                   create_critic(config), experience,
                   logger, config, precision_policy)
@@ -129,7 +132,7 @@ if __name__ == '__main__':
     jax_config.update('jax_disable_jit', True)
   if config.precision == 16:
     policy = get_mixed_precision_policy(config.precision)
-    hk.mixed_precision.set_policy(models.WorldModel, policy)
+    hk.mixed_precision.set_policy(models.BayesianWorldModel, policy)
     hk.mixed_precision.set_policy(models.Actor, policy)
     hk.mixed_precision.set_policy(DenseDecoder, policy)
     hk.mixed_precision.set_policy(Decoder, policy.with_output_dtype(
