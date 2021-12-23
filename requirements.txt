@@ -1,84 +1,75 @@
-Package                      Version
----------------------------- -------------
-absl-py                      1.0.0
-astunparse                   1.6.3
-biosppy                      0.3.0
-cached-property              1.5.2
-cachetools                   4.2.4
-certifi                      2021.10.8
-charset-normalizer           2.0.9
-chex                         0.1.0
-cloudpickle                  2.0.0
-decorator                    5.1.0
-dm-control                   0.0.412862961
-dm-env                       1.5
-dm-haiku                     0.0.6.dev0
-dm-tree                      0.1.6
-flatbuffers                  2.0
-future                       0.18.2
-gast                         0.4.0
-glfw                         2.4.0
-google-auth                  2.3.3
-google-auth-oauthlib         0.4.6
-google-pasta                 0.2.0
-grpcio                       1.42.0
-gym                          0.21.0
-h5py                         3.6.0
-idna                         3.3
-importlib-metadata           4.8.2
-jax                          0.2.26
-jaxlib                       0.1.75
-jmp                          0.0.2
-keras                        2.7.0
-Keras-Preprocessing          1.1.2
-labmaze                      1.0.5
-libclang                     12.0.0
-lxml                         4.6.4
-Markdown                     3.3.6
-numpy                        1.21.4
-oauthlib                     3.1.1
-opt-einsum                   3.3.0
-optax                        0.1.0
-Pillow                       8.4.0
-pip                          21.3.1
-protobuf                     3.19.1
-pyasn1                       0.4.8
-pyasn1-modules               0.2.8
-pyeeg                        0.4.0
-pyentrp                      0.3.1
-PyOpenGL                     3.1.5
-pyparsing                    2.4.7
-requests                     2.26.0
-requests-oauthlib            1.3.0
-rsa                          4.8
-ruamel.yaml                  0.17.17
-ruamel.yaml.clib             0.2.6
-scipy                        1.7.3
-setuptools                   58.0.4
-six                          1.16.0
-tabulate                     0.8.9
-tensorboard                  2.7.0
-tensorboard-data-server      0.6.1
-tensorboard-plugin-wit       1.8.0
-tensorboardX                 2.4.1
-tensorflow                   2.7.0
-tensorflow-estimator         2.7.0
-tensorflow-io-gcs-filesystem 0.22.0
-tensorflow-probability       0.15.0
-termcolor                    1.1.0
-toolz                        0.11.2
-tqdm                         4.62.3
-typing_extensions            4.0.1
-urllib3                      1.26.7
-Werkzeug                     2.0.2
-wheel                        0.37.0
-wrapt                        1.13.3
-zipp                         3.6.0
-
-jax~=0.2.26
-numpy~=1.21.4
-gym~=0.21.0
-optax~=0.1.0
-tensorboardx~=2.4.1
-pillow~=8.4.0
-tqdm~=4.62.3
+absl-py==1.0.0
+astunparse==1.6.3
+biosppy==0.3.0
+cached-property==1.5.2
+cachetools==4.2.4
+certifi==2021.10.8
+charset-normalizer==2.0.9
+chex==0.1.0
+cloudpickle==2.0.0
+decorator==4.4.2
+dm-control==0.0.412862961
+dm-env==1.5
+dm-haiku @ git+https://github.com/deepmind/dm-haiku@f8748576d9edc330682c828f7212248baf7168ff
+dm-tree==0.1.6
+flatbuffers==2.0
+future==0.18.2
+gast==0.4.0
+glfw==2.4.0
+google-auth==2.3.3
+google-auth-oauthlib==0.4.6
+google-pasta==0.2.0
+grpcio==1.42.0
+gym==0.21.0
+h5py==3.6.0
+idna==3.3
+imageio==2.13.3
+imageio-ffmpeg==0.4.5
+importlib-metadata==4.8.2
+jax==0.2.26
+jaxlib==0.1.75
+jmp==0.0.2
+keras==2.7.0
+Keras-Preprocessing==1.1.2
+labmaze==1.0.5
+libclang==12.0.0
+lxml==4.6.4
+Markdown==3.3.6
+moviepy==1.0.3
+numpy==1.21.4
+oauthlib==3.1.1
+opt-einsum==3.3.0
+optax @ git+git://github.com/deepmind/optax.git@16085e99edc8cbfcdc1251b6dad945f427c5eb18
+Pillow==8.4.0
+proglog==0.1.9
+protobuf==3.19.1
+pyasn1==0.4.8
+pyasn1-modules==0.2.8
+pyeeg==0.4.0
+pyentrp==0.3.1
+PyOpenGL==3.1.5
+pyparsing==2.4.7
+requests==2.26.0
+requests-oauthlib==1.3.0
+rsa==4.8
+ruamel.yaml==0.17.17
+ruamel.yaml.clib==0.2.6
+scipy==1.7.3
+six==1.16.0
+tabulate==0.8.9
+tensorboard==2.7.0
+tensorboard-data-server==0.6.1
+tensorboard-plugin-wit==1.8.0
+tensorboardX==2.4.1
+tensorflow==2.7.0
+tensorflow-estimator==2.7.0
+tensorflow-io-gcs-filesystem==0.22.0
+tensorflow-probability==0.15.0
+termcolor==1.1.0
+toolz==0.11.2
+tqdm==4.62.3
+typing_extensions==4.0.1
+urllib3==1.26.7
+Werkzeug==2.0.2
+wrapt==1.13.3
+zipp==3.6.0

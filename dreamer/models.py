@@ -4,11 +4,11 @@ import haiku as hk
 import jax
 import jax.nn as jnn
 import jax.numpy as jnp
-from gym.spaces import Space
 from tensorflow_probability.substrates import jax as tfp
 
 import dreamer.blocks as b
 from dreamer.rssm import State, Action, Observation
+from dreamer.utils import initializer
 
 tfd = tfp.distributions
 
@@ -112,22 +112,22 @@ class BayesianWorldModel(hk.Module):
 
 
 class Actor(hk.Module):
-    def __init__(self, output_sizes: Sequence[int], min_stddev):
-        super().__init__()
-        self.output_sizes = output_sizes
-        self._min_stddev = min_stddev
+  def __init__(self, output_sizes: Sequence[int], min_stddev: float,
+               initialization: str):
+    super().__init__()
+    self.output_sizes = output_sizes
+    self._min_stddev = min_stddev
+    self._initialization = initialization
 
-    def __call__(self, observation):
-        mlp = hk.nets.MLP(self.output_sizes, activation=jnn.elu)
-        mu, stddev = jnp.split(mlp(observation), 2, -1)
-        stddev = jnn.softplus(stddev) + self._min_stddev
-        multivariate_normal_diag = tfd.MultivariateNormalDiag(
-            loc=mu,
-            scale_diag=stddev
-        )
-        # Squash actions to [-1, 1]
-        squashed = tfd.TransformedDistribution(
-            multivariate_normal_diag,
-            b.StableTanhBijector()
-        )
-        return b.SampleDist(squashed)
+  def __call__(self, observation):
+    mlp = hk.nets.MLP(self.output_sizes, activation=jnn.elu,
+                      w_init=initializer(self._initialization))
+    mu, stddev = jnp.split(mlp(observation), 2, -1)
+    init_std = np.log(np.exp(5.0) - 1.0).astype(stddev.dtype)
+    stddev = jnn.softplus(stddev + init_std) + self._min_stddev
+    multivariate_normal_diag = tfd.Normal(5.0 * jnn.tanh(mu / 5.0), stddev)
+    # Squash actions to [-1, 1]
+    squashed = tfd.TransformedDistribution(multivariate_normal_diag,
+                                           b.StableTanhBijector())
+    dist = tfd.Independent(squashed, 1)
+    return b.SampleDist(dist)

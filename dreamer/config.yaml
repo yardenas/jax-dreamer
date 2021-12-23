@@ -13,27 +13,29 @@ defaults:
   update_steps: 100
   replay: {capacity: 1000, batch: 32, sequence_length: 50}
   jit: True
-  render_episodes: 1
+  render_episodes: 0
   evaluate_model: True
+  precision: 16
+  initialization: glorot
 
   # World Model
-  rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 32}
+  rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 30}
   rssm_posterior: {stddev: 1.0, learnable: True}
   rssm_prior: {stddev: 1.0, learnable: False}
   rssm_posterior_samples: 10
-  model_opt: {lr: 3e-4, eps: 1e-5, clip: 100}
+  model_opt: {lr: 6e-4, eps: 1e-7, clip: 100}
   encoder: {depth: 32, kernels: [4, 4, 4, 4]}
   decoder: {depth: 32, kernels: [5, 5, 6, 6]}
   reward: {output_sizes: [400, 400]}
-  terminal: {output_sizes: [400, 400]}
+  terminal: {output_sizes: [400, 400, 400]}
   free_kl: 3.0
   kl_scale: 1.0
 
   # Actor-Critic
   actor: {output_sizes: [400, 400, 400, 400], min_stddev: 1e-4}
-  critic: {output_sizes: [400, 400, 400, 400]}
-  actor_opt: {lr: 3e-4, eps: 1e-5, clip: 100}
-  critic_opt: {lr: 3e-4, eps: 1e-5, clip: 100}
+  critic: {output_sizes: [400, 400, 400]}
+  actor_opt: {lr: 8e-5, eps: 1e-7, clip: 100}
+  critic_opt: {lr: 8e-5, eps: 1e-7, clip: 100}
   discount: 0.99
   lambda_: 0.95
   imag_horizon: 15
@@ -42,9 +44,9 @@ debug:
   jit: False
   time_limit: 100
   training_steps_per_epoch: 200
-  evaluation_steps_per_epoch: 100
+  evaluation_steps_per_epoch: 0
   prefill: 100
   train_every: 100
   update_steps: 2
   render_episodes: 0
-  replay: {capacity: 10, batch: 5, sequence_length: 12}
+  replay: {capacity: 10, batch: 10, sequence_length: 8}
