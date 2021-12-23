@@ -100,10 +100,10 @@ class Dreamer:
 
   def observe(self, transition):
     self.training_step += self.c.action_repeat
+    self.experience.store(transition)
     if transition['terminal'] or transition['info'].get('TimeLimit.truncated',
                                                         False):
       self.state = (self.init_state, jnp.zeros_like(self.state[-1]))
-    self.experience.store(transition)
 
   @property
   def init_state(self):
