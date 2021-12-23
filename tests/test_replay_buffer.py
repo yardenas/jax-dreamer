@@ -1,7 +1,6 @@
 import unittest
 
 import gym
-import jax
 import numpy as np
 
 from dreamer.replay_buffer import ReplayBuffer
@@ -20,7 +19,7 @@ def interact(env, episodes, episode_length, buffer):
                               next_observation=next_observation,
                               action=action.astype(np.float32),
                               reward=np.array(reward, np.float32),
-                              terminal=np.array(terminal, np.bool),
+                              terminal=np.array(terminal, np.bool_),
                               info=info))
             observation = next_observation
 
@@ -32,15 +31,10 @@ class TestReplayBuffer(unittest.TestCase):
         episode_length = 10
         episodes = 3
         capacity = 5
-        buffer = ReplayBuffer(capacity, episode_length, env.observation_space,
-                              env.action_space, 2, 4)
+        buffer = ReplayBuffer(capacity, env.observation_space, env.action_space,
+                              2, 4, 16, 0)
         interact(env, episodes, episode_length, buffer)
-        self.assertEqual(buffer.idx, episodes)
-        self.assertEqual(buffer.episode_lengths[0], episode_length)
-        self.assertEqual(buffer.episode_lengths[1], episode_length)
-        self.assertEqual(buffer.episode_lengths[2], episode_length)
-        self.assertEqual(buffer.episode_lengths[-2], 0)
-        self.assertEqual(buffer.episode_lengths[-1], 0)
+        self.assertEqual(buffer.idx + 1, episodes)
 
     def test_sample(self):
         from jax.config import config as jax_config
@@ -49,10 +43,9 @@ class TestReplayBuffer(unittest.TestCase):
         episode_length = 10
         episodes = 3
         capacity = 5
-        buffer = ReplayBuffer(capacity, episode_length, env.observation_space,
-                              env.action_space, 2, 4)
+        buffer = ReplayBuffer(capacity, env.observation_space, env.action_space,
+                              2, 4, 16, 0)
         interact(env, episodes, episode_length, buffer)
-        key = jax.random.PRNGKey(43)
-        sample = buffer.sample(key, buffer.data, buffer.episode_lengths)
+        sample = next(iter(buffer.sample(1)))
         self.assertEqual(sample['observation'].shape[0], 2)
         self.assertEqual(sample['observation'].shape[1], 4)
