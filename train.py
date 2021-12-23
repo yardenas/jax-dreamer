@@ -43,7 +43,8 @@ def create_actor(config, action_space):
   actor = hk.without_apply_rng(hk.transform(
     lambda obs: models.Actor(tuple(config.actor['output_sizes']) +
                              (2 * np.prod(action_space.shape),),
-                             config.actor['min_stddev'])(obs))
+                             config.actor['min_stddev'],
+                             config.initialization)(obs))
   )
   return actor
 
@@ -51,19 +52,20 @@ def create_actor(config, action_space):
 def create_critic(config):
   critic = hk.without_apply_rng(hk.transform(
     lambda obs: DenseDecoder(tuple(config.critic['output_sizes']) + (1,),
-                             'normal')(obs)
+                             'normal', config.initialization)(obs)
   ))
   return critic
 
 
 def make_agent(config, environment, logger):
-  precision_policy = get_mixed_precision_policy(config.precision)
-  experience = ReplayBuffer(config.replay['capacity'], config.time_limit,
+  experience = ReplayBuffer(config.replay['capacity'],
                             environment.observation_space,
                             environment.action_space,
                             config.replay['batch'],
                             config.replay['sequence_length'],
-                            precision_policy.compute_dtype)
+                            config.precision,
+                            config.seed)
+  precision_policy = get_mixed_precision_policy(config.precision)
   agent = Dreamer(environment.observation_space,
                   environment.action_space,
                   create_model(config, environment.observation_space),
