@@ -51,9 +51,8 @@ class Dreamer:
       observation_space.sample()[None, None].astype(dtype),
       action_space.sample()[None, None].astype(dtype))
     features_example = jnp.concatenate(self.init_state, -1)[None]
-    self.actor = utils.Learner(actor, next(self.rng_seq),
-                               config.actor_opt, precision,
-                               features_example.astype(dtype))
+    self.actor = utils.Learner(actor, next(self.rng_seq), config.actor_opt,
+                               precision, features_example.astype(dtype))
     self.critic = utils.Learner(critic, next(self.rng_seq), config.critic_opt,
                                 precision, features_example[None].astype(dtype))
     self.experience = experience
@@ -203,13 +202,10 @@ class Dreamer:
       flattened_features = features.reshape((-1, features.shape[-1]))
       generated_features, reward, terminal = generate_experience(
         model_params, key, flattened_features, policy, params)
-      next_values = critic(critic_params,
-                           generated_features[:, 1:]).mean()
-      lambda_values = utils.compute_lambda_values(next_values,
-                                                  reward.mean(),
-                                                  terminal.mean(),
-                                                  self.c.discount,
-                                                  self.c.lambda_)
+      next_values = critic(critic_params, generated_features[:, 1:]).mean()
+      lambda_values = utils.compute_lambda_values(
+        next_values, reward.mean(), terminal.mean(),
+        self.c.discount, self.c.lambda_)
       discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
       loss_ = loss_scaler.scale((-lambda_values * discount).mean())
       return loss_, (generated_features, lambda_values)
