@@ -123,7 +123,11 @@ class MeanField(hk.Module):
         else:
             mus = np.zeros_like(flat_params)
             stddevs = np.ones_like(flat_params) * self._stddev
-        stddevs = jnn.softplus(stddevs) + 1e-3
+        # Add a bias to softplus such that a zero value to the stddevs parameter
+        # gives the empirical standard deviation.
+        empirical_stddev = flat_params.std()
+        init = np.log(np.exp(empirical_stddev) - 1.0)
+        stddevs = jnn.softplus(stddevs + init) + 1e-6
         return tfd.MultivariateNormalDiag(mus, stddevs)
 
     @functools.partial(jax.jit, static_argnums=0)
