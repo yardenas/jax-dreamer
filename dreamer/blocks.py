@@ -109,8 +109,8 @@ class MeanField(hk.Module):
         self._learnable = learnable
 
     def __call__(self):
-        flat_params = jax.tree_map(jnp.ravel, self._flattened_params)
-        flat_params = jnp.concatenate(flat_params)
+        flat_params = jax.tree_map(np.ravel, self._flattened_params)
+        flat_params = np.concatenate(flat_params)
         if self._learnable:
             mus = hk.get_parameter(
                 'mean_field_mu', (len(flat_params),),
