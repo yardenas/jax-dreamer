@@ -125,8 +125,10 @@ class MeanField(hk.Module):
                 init=hk.initializers.UniformScaling(self._stddev)
             )
         else:
-            mus = np.zeros_like(self._flat_params)
-            stddevs = np.ones_like(self._flat_params) * self._stddev
+            flat_params = jax.tree_map(np.ravel, self._flattened_params)
+            flat_params = np.concatenate(flat_params)
+            mus = np.zeros_like(flat_params)
+            stddevs = np.ones_like(flat_params) * self._stddev
         stddevs = jnn.softplus(stddevs + self._init) + 1e-6
         return tfd.MultivariateNormalDiag(mus, stddevs)
 
