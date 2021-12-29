@@ -1,6 +1,8 @@
 import functools
 from typing import Sequence, Optional
 
+import numpy as np
+
 import haiku as hk
 import jax
 import jax.nn as jnn
@@ -116,11 +118,11 @@ class MeanField(hk.Module):
             )
             stddevs = hk.get_parameter(
                 'mean_field_stddev', (len(flat_params),),
-                init=hk.initializers.RandomUniform(maxval=self._stddev)
+                init=hk.initializers.UniformScaling(self._stddev)
             )
         else:
-            mus = jnp.zeros_like(flat_params)
-            stddevs = jnp.ones_like(flat_params) * self._stddev
+            mus = np.zeros_like(flat_params)
+            stddevs = np.ones_like(flat_params) * self._stddev
         stddevs = jnn.softplus(stddevs) + 1e-3
         return tfd.MultivariateNormalDiag(mus, stddevs)
 
