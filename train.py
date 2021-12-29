@@ -79,7 +79,7 @@ def create_model(config, observation_space, action_space):
       return _model.rssm_posterior()
 
     def init(observations, actions):
-      return _model.observe_sequence(observations, actions)
+      return _model.observe_sequence(observations, actions), _model.kl()
 
     return init, (filter_state, generate_sequence, observe_sequence,
                   decode, kl, rssm_posterior)
