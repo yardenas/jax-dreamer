@@ -1,8 +1,6 @@
 import functools
 from typing import Sequence, Optional
 
-import numpy as np
-
 import haiku as hk
 import jax
 import jax.nn as jnn
@@ -95,52 +93,53 @@ class DenseDecoder(hk.Module):
 
 
 class MeanField(hk.Module):
-    def __init__(
-            self,
-            params: hk.Params,
-            stddev=1.0,
-            learnable=True
-    ):
-        super(MeanField, self).__init__()
-        flat_ps, tree_def = jax.tree_flatten(params)
-        self._flattened_params = flat_ps
-        self._tree_def = tree_def
-        self._stddev = stddev
-        self._learnable = learnable
-        # Add a bias to softplus such that a zero value to the stddevs parameter
-        # gives the empirical standard deviation.
-        flat_params = jax.tree_map(jnp.ravel, self._flattened_params)
-        self._flat_params = jnp.concatenate(flat_params)
-        empirical_stddev = self._flat_params.std()
-        self._init = jnp.log(jnp.exp(empirical_stddev) - 1.0)
+  def __init__(
+      self,
+      params: hk.Params,
+      stddev=1.0,
+      learnable=True
+  ):
+    super(MeanField, self).__init__()
+    flat_ps, tree_def = jax.tree_flatten(params)
+    self._flattened_params = flat_ps
+    self._tree_def = tree_def
+    self._stddev = stddev
+    self._learnable = learnable
+    flat_params = jax.tree_map(jnp.ravel, self._flattened_params)
+    flat_params = jnp.concatenate(flat_params)
+    self._flat_params = flat_params
 
-    def __call__(self):
-        if self._learnable:
-            mus = hk.get_parameter(
-                'mean_field_mu', (len(self._flat_params),),
-                init=hk.initializers.Constant(self._flat_params)
-            )
-            stddevs = hk.get_parameter(
-                'mean_field_stddev', (len(self._flat_params),),
-                init=hk.initializers.UniformScaling(self._stddev)
-            )
-        else:
-            flat_params = jax.tree_map(np.ravel, self._flattened_params)
-            flat_params = np.concatenate(flat_params)
-            mus = np.zeros_like(flat_params)
-            stddevs = np.ones_like(flat_params) * self._stddev
-        stddevs = jnn.softplus(stddevs + self._init) + 1e-6
-        return tfd.MultivariateNormalDiag(mus, stddevs)
+  def __call__(self):
 
-    @functools.partial(jax.jit, static_argnums=0)
-    def unflatten(self, sample):
-        out = []
-        i = 0
-        for p in self._flattened_params:
-            n = p.size
-            out.append(sample[i:i + n].reshape(p.shape))
-            i += n
-        return jax.tree_unflatten(self._tree_def, out)
+    if self._learnable:
+      mus = hk.get_parameter(
+        'mean_field_mu', (len(self._flat_params),),
+        init=hk.initializers.Constant(self._flat_params)
+      )
+      stddevs = hk.get_parameter(
+        'mean_field_stddev', (len(self._flat_params),),
+        init=hk.initializers.UniformScaling(self._stddev)
+      )
+    else:
+      mus = jnp.zeros_like(self._flat_params)
+      stddevs = jnp.ones_like(self._flat_params) * self._stddev
+    # Add a bias to softplus such that a zero value to the stddevs parameter
+    # gives the empirical standard deviation.
+    # empirical_stddev = flat_params.std()
+    empirical_stddev = self._flat_params.std()
+    init = jnp.log(jnp.exp(empirical_stddev) - 1.0)
+    stddevs = jnn.softplus(stddevs + init) + 1e-6
+    return tfd.MultivariateNormalDiag(mus, stddevs)
+
+  @functools.partial(jax.jit, static_argnums=0)
+  def unflatten(self, sample):
+    out = []
+    i = 0
+    for p in self._flattened_params:
+      n = p.size
+      out.append(sample[i:i + n].reshape(p.shape))
+      i += n
+    return jax.tree_unflatten(self._tree_def, out)
 
 
 # Following https://github.com/tensorflow/probability/issues/840 and
