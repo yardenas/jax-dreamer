@@ -120,14 +120,14 @@ class MeanField(hk.Module):
         'mean_field_stddev', (len(self._flat_params),),
         init=hk.initializers.UniformScaling(self._stddev)
       )
+      empirical_stddev = self._flat_params.std()
+      init = jnp.log(jnp.exp(empirical_stddev) - 1.0)
     else:
       mus = jnp.zeros_like(self._flat_params)
       stddevs = jnp.ones_like(self._flat_params) * self._stddev
+      init = jnp.log(jnp.exp(self._stddev) - 1.0)
     # Add a bias to softplus such that a zero value to the stddevs parameter
     # gives the empirical standard deviation.
-    # empirical_stddev = flat_params.std()
-    empirical_stddev = self._flat_params.std()
-    init = jnp.log(jnp.exp(empirical_stddev) - 1.0)
     stddevs = jnn.softplus(stddevs + init) + 1e-6
     return tfd.MultivariateNormalDiag(mus, stddevs)
 
