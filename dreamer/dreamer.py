@@ -145,7 +145,7 @@ class Dreamer:
       generated_features, lambda_values
     ) = self.update_actor(features, actor_state, model_state[0],
                           critic_state[0], subkey)
-    critic_params, critic_report = self.update_critic(
+    critic_state, critic_report = self.update_critic(
       generated_features, critic_state, lambda_values)
     report = {**model_report, **actor_report, **critic_report}
     return model_state, actor_state, critic_state, report
