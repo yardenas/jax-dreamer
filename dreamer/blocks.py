@@ -107,27 +107,27 @@ class MeanField(hk.Module):
         self._tree_def = tree_def
         self._stddev = stddev
         self._learnable = learnable
+        # Add a bias to softplus such that a zero value to the stddevs parameter
+        # gives the empirical standard deviation.
+        flat_params = jax.tree_map(jnp.ravel, self._flattened_params)
+        self._flat_params = jnp.concatenate(flat_params)
+        empirical_stddev = self._flat_params.std()
+        self._init = jnp.log(jnp.exp(empirical_stddev) - 1.0)
 
     def __call__(self):
-        flat_params = jax.tree_map(np.ravel, self._flattened_params)
-        flat_params = np.concatenate(flat_params)
         if self._learnable:
             mus = hk.get_parameter(
-                'mean_field_mu', (len(flat_params),),
-                init=hk.initializers.Constant(flat_params)
+                'mean_field_mu', (len(self._flat_params),),
+                init=hk.initializers.Constant(self._flat_params)
             )
             stddevs = hk.get_parameter(
-                'mean_field_stddev', (len(flat_params),),
+                'mean_field_stddev', (len(self._flat_params),),
                 init=hk.initializers.UniformScaling(self._stddev)
             )
         else:
-            mus = np.zeros_like(flat_params)
-            stddevs = np.ones_like(flat_params) * self._stddev
-        # Add a bias to softplus such that a zero value to the stddevs parameter
-        # gives the empirical standard deviation.
-        empirical_stddev = flat_params.std()
-        init = np.log(np.exp(empirical_stddev) - 1.0).astype(mus.dtype)
-        stddevs = jnn.softplus(stddevs + init) + 1e-6
+            mus = np.zeros_like(self._flat_params)
+            stddevs = np.ones_like(self._flat_params) * self._stddev
+        stddevs = jnn.softplus(stddevs + self._init) + 1e-6
         return tfd.MultivariateNormalDiag(mus, stddevs)
 
     @functools.partial(jax.jit, static_argnums=0)
