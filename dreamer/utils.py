@@ -19,7 +19,7 @@ class Learner:
       seed: PRNGKey,
       optimizer_config: dict,
       precision: jmp.Policy,
-      *input_example: Tuple
+      *input_example: Union[jnp.ndarray, float]
   ):
     self.optimizer = optax.chain(
       optax.clip_by_global_norm(optimizer_config['clip']),
@@ -98,6 +98,12 @@ def discount(factor, length):
   d = np.cumprod(factor * np.ones((length - 1,)))
   d = np.concatenate([np.ones((1,)), d])
   return d
+
+
+def params_to_vec(params: hk.Params) -> jnp.ndarray:
+  flat_ps, _ = jax.tree_flatten(params)
+  flat_params = jax.tree_map(jnp.ravel, flat_ps)
+  return jnp.concatenate(flat_params)
 
 
 def initializer(name: str) -> hk.initializers.Initializer:

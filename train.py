@@ -75,14 +75,14 @@ def create_model(config, observation_space, action_space):
     def kl():
       return _model.kl()
 
-    def posterior():
+    def rssm_posterior():
       return _model.rssm_posterior()
 
     def init(observations, actions):
       return _model.observe_sequence(observations, actions)
 
     return init, (filter_state, generate_sequence, observe_sequence,
-                  decode, kl, posterior)
+                  decode, kl, rssm_posterior)
 
   return hk.multi_transform(model)
 

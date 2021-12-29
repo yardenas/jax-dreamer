@@ -139,3 +139,17 @@ class Actor(hk.Module):
                                            b.StableTanhBijector())
     dist = tfd.Independent(squashed, 1)
     return b.SampleDist(dist)
+
+
+class ConstraintLikelihood(hk.Module):
+  def __init__(self):
+    super().__init__()
+
+  def __call__(self, log_p):
+    alpha = hk.get_parameter(
+      "alpha",
+      shape=[1, ],
+      dtype=jnp.float32,
+      init=hk.initializers.Constant(0.0)
+    )
+    return -jnp.exp(alpha) * log_p
