@@ -183,7 +183,7 @@ class Dreamer:
                                    ).mean()
       log_p_rews = reward.log_prob(batch['reward']).mean()
       log_p_terms = terminal.log_prob(batch['terminal']).mean()
-      loss_ = (params_kl_ + self.c.kl_scale * kl -
+      loss_ = (self.c.params_kl_scale * params_kl_ + self.c.kl_scale * kl -
                log_p_obs - log_p_rews - log_p_terms)
       return loss_scaler.scale(loss_), {
         'agent/model/kl': kl,
