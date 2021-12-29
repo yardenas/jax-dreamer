@@ -35,7 +35,8 @@ class Dreamer:
       model: hk.MultiTransformed,
       actor: hk.Transformed,
       critic: hk.Transformed,
-      optimistic_model: hk.Transformed,
+      optimistic_model: hk.MultiTransformed,
+      optimistic_model_params: hk.Params,
       model_likelihood_constraint: hk.Transformed,
       experience: ReplayBuffer,
       logger: TrainingLogger,
@@ -59,7 +60,8 @@ class Dreamer:
                                 precision, features_example[None].astype(dtype))
     self.optimistic_model = utils.Learner(optimistic_model, next(self.rng_seq),
                                           config.optimistic_model_opt,
-                                          precision)
+                                          precision,
+                                          params=optimistic_model_params)
     self.constraint = utils.Learner(model_likelihood_constraint,
                                     next(self.rng_seq), config.constraint_opt,
                                     precision, 0.0)
@@ -137,24 +139,23 @@ class Dreamer:
       model_state: LearningState,
       actor_state: LearningState,
       critic_state: LearningState,
-      optimitic_model_state: LearningState,
+      optimistic_model_state: LearningState,
       constraint_state: LearningState,
       key: PRNGKey,
   ) -> Tuple[Tuple[LearningState, LearningState, LearningState,
                    LearningState, LearningState], dict]:
     _, key_model, key_actor = jax.random.split(key, 3)
-    model_state, model_report, features = self.update_model(
-      batch, model_state, key_model)
+    model_state, model_report, features = self.update_model(batch, model_state,
+                                                            key_model)
     states, model_actor_report, aux = self.optimistic_update_actor(
-      features, actor_state, optimitic_model_state, constraint_state[0],
-      critic_state[0], key_actor)
+      features, actor_state, optimistic_model_state, constraint_state[0],
+      critic_state[0], model_state[0], key_actor)
     actor_state, optimistic_model_state = states
     generated_features, lambda_values, model_log_ps, *_ = aux
     critic_state, critic_report = self.update_critic(
       generated_features, critic_state, lambda_values)
     constraint_state, constraint_report = self.update_constraint(
       model_log_ps, constraint_state)
-
     report = {**model_report, **model_actor_report, **critic_report,
               **constraint_report}
     states = (model_state, actor_state, critic_state,
@@ -167,8 +168,8 @@ class Dreamer:
       state: LearningState,
       key: PRNGKey
   ) -> Tuple[LearningState, dict, jnp.ndarray]:
-    params, opt_state, loss_scaler = state
-    _, _, infer, *_ = self.model.apply
+    params, _, loss_scaler = state
+    _, _, infer, _, params_kl, _ = self.model.apply
 
     def loss(params: hk.Params) -> Tuple[float, dict]:
       outputs_infer = infer(params, key, batch['observation'],
@@ -177,11 +178,13 @@ class Dreamer:
        posterior), features, decoded, reward, terminal = outputs_infer
       kl = jnp.maximum(tfd.kl_divergence(posterior, prior).mean(),
                        self.c.free_kl)
-      log_p_obs = decoded.log_prob(batch['observation'].astype(
-        jnp.float32)).mean()
+      params_kl_ = params_kl(params, None).mean()
+      log_p_obs = decoded.log_prob(batch['observation'].astype(jnp.float32)
+                                   ).mean()
       log_p_rews = reward.log_prob(batch['reward']).mean()
       log_p_terms = terminal.log_prob(batch['terminal']).mean()
-      loss_ = self.c.kl_scale * kl - log_p_obs - log_p_rews - log_p_terms
+      loss_ = (params_kl_ + self.c.kl_scale * kl -
+               log_p_obs - log_p_rews - log_p_terms)
       return loss_scaler.scale(loss_), {
         'agent/model/kl': kl,
         'agent/model/post_entropy': posterior.entropy().mean(),
@@ -204,21 +207,23 @@ class Dreamer:
       optimistic_model_state: LearningState,
       constraint_params: hk.Params,
       critic_params: hk.Params,
+      model_params: hk.Params,
       key: PRNGKey
   ) -> Tuple[Tuple[LearningState, LearningState], dict,
              Tuple[jnp.ndarray, jnp.ndarray,
                    jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
-    actor_params, actor_opt_state, actor_loss_scaler = actor_state
-    model_params, model_opt_state, model_loss_scaler = optimistic_model_state
+    actor_params, _, actor_loss_scaler = actor_state
+    optimistic_model_params, _, model_loss_scaler = optimistic_model_state
     _, generate_experience, *_, rssm_posterior = self.model.apply
     policy = self.actor
     critic = self.critic.apply
     constrain = self.constraint.apply
 
-    def loss(actor_params: hk.Params, model_params: hk.Params):
+    def loss(actor_params: hk.Params, optimistic_model_params: hk.Params):
       flattened_features = features.reshape((-1, features.shape[-1]))
       generated_features, reward, terminal = generate_experience(
-        model_params, key, flattened_features, policy, actor_params)
+        model_params, key, flattened_features, policy, actor_params,
+        optimistic_model_params)
       next_values = critic(critic_params, generated_features[:, 1:]).mean()
       lambda_values = utils.compute_lambda_values(
         next_values, reward.mean(), terminal.mean(),
@@ -226,25 +231,27 @@ class Dreamer:
       discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
       objective = (lambda_values * discount).mean()
       actor_loss = actor_loss_scaler.scale(-objective)
-      vec_ps = utils.params_to_vec(model_params)
-      model_log_ps = rssm_posterior().log_prob(vec_ps)
+      vec_ps = utils.params_to_vec(optimistic_model_params)
+      model_log_ps = rssm_posterior(model_params, None).log_prob(vec_ps)
       model_loss = -objective + constrain(constraint_params, model_log_ps)
-      return actor_loss, model_loss, (generated_features, lambda_values,
-                                      model_log_ps,
-                                      actor_loss, model_loss)
+      model_loss = model_loss_scaler.scale(model_loss.mean())
+      return actor_loss + model_loss, (generated_features, lambda_values,
+                                       model_log_ps,
+                                       actor_loss, model_loss)
 
     grads, aux = jax.grad(loss, (0, 1), has_aux=True)(actor_params,
-                                                      model_params)
-    actor_grads, models_grads = grads
+                                                      optimistic_model_params)
+    actor_grads, optimistic_model_grads = grads
     new_actor_state = self.actor.grad_step(actor_grads, actor_state)
-    new_model_state = self.optimistic_model.grad_step(actor_grads, actor_state)
+    new_model_state = self.optimistic_model.grad_step(optimistic_model_grads,
+                                                      optimistic_model_state)
     entropy = policy.apply(actor_params,
                            features[:, 0]).entropy(seed=key).mean()
     return (new_actor_state, new_model_state), {
       'agent/actor/loss': actor_loss_scaler.unscale(aux[-2]),
       'agent/optimistic_model/loss': model_loss_scaler.unscale(aux[-1]),
       'agent/actor/grads': optax.global_norm(actor_grads),
-      'agent/optimistic_model/grads': optax.global_norm(models_grads),
+      'agent/optimistic_model/grads': optax.global_norm(optimistic_model_grads),
       'agent/optimistic_model/log_p': aux[-3],
       'agent/actor/entropy': entropy
     }, aux
@@ -276,8 +283,7 @@ class Dreamer:
     params, opt_state, loss_scaler = state
 
     def loss(params: hk.Params) -> float:
-      constraint = self.constraint.apply(params,
-                                         model_log_p + self.c.target_log_p)
+      constraint = -self.constraint.apply(params, model_log_p).mean()
       return loss_scaler.scale(constraint)
 
     (loss_, grads) = jax.value_and_grad(loss)(params)

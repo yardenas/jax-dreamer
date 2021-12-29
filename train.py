@@ -61,10 +61,10 @@ def create_model(config, observation_space, action_space):
     def filter_state(prev_state, prev_action, observation):
       return _model(prev_state, prev_action, observation)
 
-    def generate_sequence(initial_state, policy,
-                          policy_params, actions=None):
+    def generate_sequence(initial_state, policy, policy_params,
+                          rssm_params=None, actions=None):
       return _model.generate_sequence(initial_state, policy,
-                                      policy_params, actions)
+                                      policy_params, rssm_params, actions)
 
     def observe_sequence(observations, actions):
       return _model.observe_sequence(observations, actions)
@@ -105,6 +105,17 @@ def create_critic(config):
   return critic
 
 
+def create_optimistic_model(config, observation_space, action_space):
+  return create_rssm(config, observation_space, action_space)
+
+
+def create_constraint(config):
+  return hk.without_apply_rng(hk.transform(
+    lambda log_p:
+    models.LikelihoodConstraint(np.log(config.likelihood_threshold))(log_p))
+  )
+
+
 def make_agent(config, environment, logger):
   experience = ReplayBuffer(config.replay['capacity'],
                             environment.observation_space,
@@ -114,13 +125,18 @@ def make_agent(config, environment, logger):
                             config.precision,
                             config.seed)
   precision_policy = get_mixed_precision_policy(config.precision)
+  optimistic_rssm, rssm_params = create_optimistic_model(
+    config, environment.observation_space, environment.action_space)
   agent = Dreamer(environment.observation_space,
                   environment.action_space,
                   create_model(config, environment.observation_space,
                                environment.action_space),
                   create_actor(config, environment.action_space),
-                  create_critic(config), experience,
-                  logger, config, precision_policy)
+                  create_critic(config),
+                  optimistic_rssm,
+                  rssm_params,
+                  create_constraint(config),
+                  experience, logger, config, precision_policy)
   return agent
 
 

@@ -1,5 +1,5 @@
 import functools
-from typing import Callable, Tuple, Union
+from typing import Callable, Tuple, Union, Optional
 
 import haiku as hk
 import jax.numpy as jnp
@@ -19,14 +19,18 @@ class Learner:
       seed: PRNGKey,
       optimizer_config: dict,
       precision: jmp.Policy,
-      *input_example: Union[jnp.ndarray, float]
+      *input_example: Union[jnp.ndarray, float],
+      params: Optional[hk.Params] = None
   ):
     self.optimizer = optax.chain(
       optax.clip_by_global_norm(optimizer_config['clip']),
       optax.scale_by_adam(eps=optimizer_config['eps']),
       optax.scale(-optimizer_config['lr']))
     self.model = model
-    self.params = self.model.init(seed, *input_example)
+    if params is None:
+      self.params = self.model.init(seed, *input_example)
+    else:
+      self.params = params
     self.opt_state = self.optimizer.init(self.params)
     self.loss_scaler = {
       jnp.float16: jmp.DynamicLossScale(jmp.half_dtype()(2 ** 15),

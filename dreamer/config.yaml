@@ -40,9 +40,10 @@ defaults:
   lambda_: 0.95
   imag_horizon: 15
 
- # Optimism
- optimistic_model_opt: {lr: 6e-4, eps: 1e-7, clip: 100}
- constraint_opt: {lr: 3e-4, eps: 1e-8, clip: 1e6}
+  # Optimism
+  optimistic_model_opt: {lr: 6e-4, eps: 1e-7, clip: 100}
+  constraint_opt: {lr: 3e-4, eps: 1e-8, clip: 1e6}
+  likelihood_threshold: 0.95
 
 debug:
   jit: False
