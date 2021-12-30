@@ -112,8 +112,8 @@ def create_optimistic_model(config, observation_space, action_space):
 def create_constraint(config):
   return hk.without_apply_rng(hk.transform(
     lambda log_p:
-    models.LikelihoodConstraint(np.log(config.likelihood_threshold))(log_p))
-  )
+    models.LikelihoodConstraint(np.log(config.likelihood_threshold),
+                                config.initial_lagrangian)(log_p)))
 
 
 def make_agent(config, environment, logger):
@@ -150,7 +150,6 @@ if __name__ == '__main__':
     policy = get_mixed_precision_policy(config.precision)
     hk.mixed_precision.set_policy(models.BayesianWorldModel, policy)
     hk.mixed_precision.set_policy(models.Actor, policy)
-    hk.mixed_precision.set_policy(models.LikelihoodConstraint, policy)
     hk.mixed_precision.set_policy(DenseDecoder, policy)
     f32_policy = policy.with_output_dtype(jnp.float32)
     hk.mixed_precision.set_policy(Decoder, f32_policy)

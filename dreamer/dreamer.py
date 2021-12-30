@@ -249,8 +249,8 @@ class Dreamer:
     new_actor_state = self.actor.grad_step(actor_grads, actor_state)
     new_model_state = self.optimistic_model.grad_step(optimistic_model_grads,
                                                       optimistic_model_state)
-    entropy = policy.apply(actor_params,
-                           features[:, 0]).entropy(seed=key).mean()
+    entropy = policy.apply(actor_params, features[:, 0]
+                           ).entropy(seed=key).mean()
     return (new_actor_state, new_model_state), {
       'agent/actor/loss': actor_loss_scaler.unscale(aux[-2]),
       'agent/optimistic_model/loss': model_loss_scaler.unscale(aux[-1]),

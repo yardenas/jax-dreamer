@@ -144,15 +144,16 @@ class Actor(hk.Module):
 
 
 class LikelihoodConstraint(hk.Module):
-  def __init__(self, log_p_threshold):
+  def __init__(self, log_p_threshold, initial_lagrangian):
     super().__init__()
     self._log_p_threshold = log_p_threshold
+    self._initial_lagrangian = np.log(np.exp(initial_lagrangian) - 1.0)
 
   def __call__(self, log_p):
-    alpha = hk.get_parameter(
-      "alpha",
+    lagrangian = hk.get_parameter(
+      "lagrangian",
       shape=[1, ],
       dtype=jnp.float32,
-      init=hk.initializers.Constant(0.0)
+      init=hk.initializers.Constant(self._initial_lagrangian)
     )
-    return jnn.softplus(alpha) * (self._log_p_threshold - log_p)
+    return jnn.softplus(lagrangian) * (self._log_p_threshold - log_p)
