@@ -150,6 +150,7 @@ if __name__ == '__main__':
     policy = get_mixed_precision_policy(config.precision)
     hk.mixed_precision.set_policy(models.BayesianWorldModel, policy)
     hk.mixed_precision.set_policy(models.Actor, policy)
+    hk.mixed_precision.set_policy(models.LikelihoodConstraint, policy)
     hk.mixed_precision.set_policy(DenseDecoder, policy)
     f32_policy = policy.with_output_dtype(jnp.float32)
     hk.mixed_precision.set_policy(Decoder, f32_policy)
