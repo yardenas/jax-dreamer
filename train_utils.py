@@ -167,16 +167,19 @@ def load_config():
   defaults = {}
   for name in args.configs:
     defaults.update(configs[name])
-  params_override = defaultdict(dict)
+  updated_remaining = []
   for idx in range(0, len(remaining), 2):
     stripped = remaining[idx].strip('-')
     if '.' in stripped:
       params_group, key = stripped.split('.')
-      params_override[params_group].update({key: remaining[idx + 1]})
+      orig_value = defaults[params_group][key]
+      defaults[params_group][key] = type(orig_value)(remaining[idx + 1])
+    else:
+      updated_remaining.append(remaining[idx])
+      updated_remaining.append(remaining[idx + 1])
+  remaining = updated_remaining
   parser = argparse.ArgumentParser()
   for key, value in sorted(defaults.items(), key=lambda x: x[0]):
-    if key in params_override:
-      value.update(params_override[key])
     arg_type = args_type(value)
     parser.add_argument(f'--{key}', type=arg_type, default=arg_type(value))
   return parser.parse_args(remaining)
