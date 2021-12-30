@@ -237,11 +237,12 @@ class Dreamer:
       actor_loss = actor_loss_scaler.scale(-objective)
       vec_ps = utils.params_to_vec(optimistic_model_params)
       model_log_ps = rssm_posterior(model_params, None).log_prob(vec_ps)
-      model_loss = -objective + constrain(constraint_params, model_log_ps)
+      constraint, lagrangian = constrain(constraint_params, model_log_ps)
+      model_loss = -objective + constraint
       model_loss = model_loss_scaler.scale(model_loss.mean())
       return actor_loss + model_loss, (generated_features, lambda_values,
-                                       model_log_ps,
-                                       actor_loss, model_loss)
+                                       model_log_ps, actor_loss, model_loss,
+                                       lagrangian)
 
     grads, aux = jax.grad(loss, (0, 1), has_aux=True)(actor_params,
                                                       optimistic_model_params)
@@ -252,11 +253,12 @@ class Dreamer:
     entropy = policy.apply(actor_params, features[:, 0]
                            ).entropy(seed=key).mean()
     return (new_actor_state, new_model_state), {
-      'agent/actor/loss': actor_loss_scaler.unscale(aux[-2]),
-      'agent/optimistic_model/loss': model_loss_scaler.unscale(aux[-1]),
+      'agent/actor/loss': actor_loss_scaler.unscale(aux[-3]),
+      'agent/optimistic_model/loss': model_loss_scaler.unscale(aux[-2]),
       'agent/actor/grads': optax.global_norm(actor_grads),
       'agent/optimistic_model/grads': optax.global_norm(optimistic_model_grads),
-      'agent/optimistic_model/log_p': -aux[-3],
+      'agent/optimistic_model/log_p': -aux[-4],
+      'agent/constraint/lagrangian': -aux[-1],
       'agent/actor/entropy': entropy
     }, aux
 
@@ -287,7 +289,7 @@ class Dreamer:
     params, opt_state, loss_scaler = state
 
     def loss(params: hk.Params) -> float:
-      constraint = -self.constraint.apply(params, model_log_p).mean()
+      constraint, _ = -self.constraint.apply(params, model_log_p).mean()
       return loss_scaler.scale(constraint)
 
     (loss_, grads) = jax.value_and_grad(loss)(params)

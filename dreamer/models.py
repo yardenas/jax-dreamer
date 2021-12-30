@@ -156,4 +156,5 @@ class LikelihoodConstraint(hk.Module):
       dtype=jnp.float32,
       init=hk.initializers.Constant(self._initial_lagrangian)
     )
-    return jnn.softplus(lagrangian) * (self._log_p_threshold - log_p)
+    lagrangian = jnn.softplus(lagrangian)
+    return lagrangian * (self._log_p_threshold - log_p), lagrangian
