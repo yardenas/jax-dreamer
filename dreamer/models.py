@@ -39,6 +39,7 @@ class BayesianWorldModel(hk.Module):
                                    + (1,), 'bernoulli',
                                    config.initialization)
     self._posterior_samples = config.rssm_posterior_samples
+    self._params_kl_scale = config.params_kl_scale
 
   def __call__(
       self,
@@ -113,7 +114,8 @@ class BayesianWorldModel(hk.Module):
     return self.decoder(featuers)
 
   def kl(self) -> tfd.Distribution:
-    return tfd.kl_divergence(self.rssm_posterior(), self.rssm_prior())
+    kl_ = tfd.kl_divergence(self.rssm_posterior(), self.rssm_prior()).mean()
+    return kl_ * self._params_kl_scale
 
   def rssm_posterior(self) -> tfd.MultivariateNormalDiag:
     return self.rssm_posterior()

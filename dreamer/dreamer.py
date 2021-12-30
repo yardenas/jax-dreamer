@@ -178,12 +178,12 @@ class Dreamer:
        posterior), features, decoded, reward, terminal = outputs_infer
       kl = jnp.maximum(tfd.kl_divergence(posterior, prior).mean(),
                        self.c.free_kl)
-      params_kl_ = params_kl(params, None).mean()
+      params_kl_ = params_kl(params, None)
       log_p_obs = decoded.log_prob(batch['observation'].astype(jnp.float32)
                                    ).mean()
       log_p_rews = reward.log_prob(batch['reward']).mean()
       log_p_terms = terminal.log_prob(batch['terminal']).mean()
-      loss_ = (self.c.params_kl_scale * params_kl_ + self.c.kl_scale * kl -
+      loss_ = (params_kl_ + self.c.kl_scale * kl -
                log_p_obs - log_p_rews - log_p_terms)
       return loss_scaler.scale(loss_), {
         'agent/model/kl': kl,
@@ -222,6 +222,9 @@ class Dreamer:
 
     def loss(actor_params: hk.Params, optimistic_model_params: hk.Params):
       flattened_features = features.reshape((-1, features.shape[-1]))
+      # Generate new experience with model. Model params is used for the
+      # Bayesian world model while the optimistic model params is used to
+      # parameterize an optimistic RSSM.
       generated_features, reward, terminal = generate_experience(
         model_params, key, flattened_features, policy, actor_params,
         optimistic_model_params)
