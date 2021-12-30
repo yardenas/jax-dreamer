@@ -327,5 +327,6 @@ class Dreamer:
 
   @learning_states.setter
   def learning_states(self, states):
-    for model_state, state in zip(self.learning_states, states):
-      model_state = state
+    (self.model.learning_state, self.actor.learning_state,
+     self.critic.learning_state, self.optimistic_model.learning_state,
+     self.constraint.learning_state) = states
