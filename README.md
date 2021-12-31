@@ -3,7 +3,7 @@ An implementation of [Dreamer](https://github.com/danijar/dreamer), a model-base
 
 ## Installation
 ```
-conda create -n jax-dreamer python=3.6
+conda create -n jax-dreamer python=3.7
 conda activate jax-dreamer
 pip3 install -r requirements.txt
 ```
