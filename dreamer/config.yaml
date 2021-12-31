@@ -49,9 +49,9 @@ defaults:
 
 debug:
   jit: False
-  time_limit: 100
-  training_steps_per_epoch: 200
-  evaluation_steps_per_epoch: 0
+  time_limit: 50
+  training_steps_per_epoch: 100
+  evaluation_steps_per_epoch: 100
   prefill: 100
   train_every: 100
   update_steps: 2

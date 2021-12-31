@@ -258,8 +258,8 @@ class Dreamer:
       'agent/actor/entropy': entropy,
       'agent/optimistic_model/loss': model_loss_scaler.unscale(aux[-2]),
       'agent/optimistic_model/grads': optax.global_norm(optimistic_model_grads),
-      'agent/optimistic_model/log_p': -aux[-4],
-      'agent/constraint/lagrangian': -aux[-1]
+      'agent/optimistic_model/log_p': aux[-4],
+      'agent/constraint/lagrangian': aux[-1]
     }, aux
 
   def update_critic(
