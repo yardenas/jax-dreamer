@@ -198,7 +198,7 @@ class Dreamer:
 
     grads, report = jax.grad(loss, has_aux=True)(params)
     new_state = self.model.grad_step(grads, state)
-    report['agent/model/grads'] = optax.global_norm(grads)
+    report['agent/model/grads'] = loss_scaler.scale(optax.global_norm(grads))
     return new_state, report, report.pop('features')
 
   def optimistic_update_actor(
@@ -249,14 +249,17 @@ class Dreamer:
     new_actor_state = self.actor.grad_step(actor_grads, actor_state)
     new_model_state = self.optimistic_model.grad_step(optimistic_model_grads,
                                                       optimistic_model_state)
+    new_state = new_actor_state, new_model_state
     entropy = policy.apply(actor_params, features[:, 0]
                            ).entropy(seed=key).mean()
-    return (new_actor_state, new_model_state), {
+    return new_state, {
       'agent/actor/loss': actor_loss_scaler.unscale(aux[-3]),
-      'agent/actor/grads': optax.global_norm(actor_grads),
+      'agent/actor/grads': actor_loss_scaler.scale(
+        optax.global_norm(actor_grads)),
       'agent/actor/entropy': entropy,
       'agent/optimistic_model/loss': model_loss_scaler.unscale(aux[-2]),
-      'agent/optimistic_model/grads': optax.global_norm(optimistic_model_grads),
+      'agent/optimistic_model/grads': model_loss_scaler.scale(
+        optax.global_norm(optimistic_model_grads)),
       'agent/optimistic_model/log_p': aux[-4],
       'agent/constraint/lagrangian': aux[-1]
     }, aux
@@ -277,25 +280,28 @@ class Dreamer:
 
     (loss_, grads) = jax.value_and_grad(loss)(params)
     new_state = self.critic.grad_step(grads, state)
-    return new_state, {'agent/critic/loss': loss_scaler.unscale(loss_),
-                       'agent/critic/grads': optax.global_norm(grads)}
+    return new_state, {
+      'agent/critic/loss': loss_scaler.unscale(loss_),
+      'agent/critic/grads': loss_scaler.scale(optax.global_norm(grads))
+    }
 
-  def update_constraint(
-      self,
-      model_log_p: jnp.ndarray,
-      state: LearningState
-  ) -> Tuple[LearningState, dict]:
+  def update_constraint(self,
+                        model_log_p: jnp.ndarray,
+                        state: LearningState
+                        ) -> Tuple[LearningState, dict]:
     params, opt_state, loss_scaler = state
 
-    # TODO (yarden): maybe just handwrite this first-order update rule instead?
     def loss(params: hk.Params) -> float:
       constraint, _ = self.constraint.apply(params, model_log_p)
       return loss_scaler.scale(-constraint.mean())
 
+    # TODO (yarden): maybe just handwrite this first-order update rule instead?
     (loss_, grads) = jax.value_and_grad(loss)(params)
     new_state = self.constraint.grad_step(grads, state)
-    return new_state, {'agent/constraint/loss': loss_scaler.unscale(loss_),
-                       'agent/constraint/grads': optax.global_norm(grads)}
+    return new_state, {
+      'agent/constraint/loss': loss_scaler.unscale(loss_),
+      'agent/constraint/grads': loss_scaler.scale(optax.global_norm(grads))
+    }
 
   def write(self, path):
     os.makedirs(path, exist_ok=True)
