@@ -287,6 +287,7 @@ class Dreamer:
   ) -> Tuple[LearningState, dict]:
     params, opt_state, loss_scaler = state
 
+    # TODO (yarden): maybe just handwrite this first-order update rule instead?
     def loss(params: hk.Params) -> float:
       constraint, _ = self.constraint.apply(params, model_log_p)
       return loss_scaler.scale(constraint.mean())
