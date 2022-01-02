@@ -184,7 +184,7 @@ class Dreamer:
 
     grads, report = jax.grad(loss, has_aux=True)(params)
     new_state = self.model.grad_step(grads, state)
-    report['agent/model/grads'] = optax.global_norm(grads)
+    report['agent/model/grads'] = loss_scaler.scale(optax.global_norm(grads))
     return new_state, report, report.pop('features')
 
   def update_actor(
@@ -218,9 +218,11 @@ class Dreamer:
     (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(params)
     new_state = self.actor.grad_step(grads, state)
     entropy = policy.apply(params, features[:, 0]).entropy(seed=key).mean()
-    return new_state, {'agent/actor/loss': loss_scaler.unscale(loss_),
-                       'agent/actor/grads': optax.global_norm(grads),
-                       'agent/actor/entropy': entropy}, aux
+    return new_state, {
+      'agent/actor/loss': loss_scaler.unscale(loss_),
+      'agent/actor/grads': loss_scaler.scale(optax.global_norm(grads)),
+      'agent/actor/entropy': entropy
+    }, aux
 
   def update_critic(
       self,
@@ -238,8 +240,10 @@ class Dreamer:
 
     (loss_, grads) = jax.value_and_grad(loss)(params)
     new_state = self.critic.grad_step(grads, state)
-    return new_state, {'agent/critic/loss': loss_scaler.unscale(loss_),
-                       'agent/critic/grads': optax.global_norm(grads)}
+    return new_state, {
+      'agent/critic/loss': loss_scaler.unscale(loss_),
+      'agent/critic/grads': loss_scaler.scale(optax.global_norm(grads))
+    }
 
   def write(self, path):
     os.makedirs(path, exist_ok=True)
