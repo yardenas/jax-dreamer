@@ -37,7 +37,7 @@ class Prior(hk.Module):
     x = hk.Linear(self.c['stochastic_size'] * 2, name='h3',
                   w_init=initializer(self.c['initialization']))(x)
     mean, stddev = jnp.split(x, 2, -1)
-    stddev = jnn.softplus(stddev) + 0.1
+    stddev = jnn.softplus(stddev) + self.c['min_stddev']
     prior = tfd.MultivariateNormalDiag(mean, stddev)
     sample = prior.sample(seed=hk.next_rng_key())
     return prior, (sample, det)
@@ -57,7 +57,7 @@ class Posterior(hk.Module):
     x = hk.Linear(self.c['stochastic_size'] * 2, name='h2',
                   w_init=initializer(self.c['initialization']))(x)
     mean, stddev = jnp.split(x, 2, -1)
-    stddev = jnn.softplus(stddev) + 0.1
+    stddev = jnn.softplus(stddev) + self.c['min_stddev']
     posterior = tfd.MultivariateNormalDiag(mean, stddev)
     sample = posterior.sample(seed=hk.next_rng_key())
     return posterior, (sample, det)

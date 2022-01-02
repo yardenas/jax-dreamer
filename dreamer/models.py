@@ -51,9 +51,7 @@ class BayesianWorldModel(hk.Module):
              State]:
     observation = jnp.squeeze(self.encoder(observation[None, None]))
     # TODO (yarden): How can we do posterior sampling here instead?
-    params = self.rssm_posterior.unflatten(
-      self.rssm_posterior().mean()
-    )
+    params = self.rssm_posterior.unflatten(self.rssm_posterior().mean())
     filter_, *_ = self.rssm.apply
     return filter_(params, hk.next_rng_key(), prev_state, prev_action,
                    observation)
@@ -68,8 +66,7 @@ class BayesianWorldModel(hk.Module):
   ) -> Tuple[jnp.ndarray, tfd.Normal, tfd.Bernoulli]:
     _, generate, *_ = self.rssm.apply
     if rssm_params is None:
-      rssm_params = self.rssm_posterior.unflatten(
-        self.rssm_posterior().mean())
+      rssm_params = self.rssm_posterior.unflatten(self.rssm_posterior().mean())
     features = generate(rssm_params, hk.next_rng_key(),
                         initial_features, actor, actor_params, actions)
     reward = self.reward(features)

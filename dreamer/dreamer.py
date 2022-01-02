@@ -226,8 +226,7 @@ class Dreamer:
       # Bayesian world model while the optimistic model params is used to
       # parameterize an optimistic RSSM.
       generated_features, reward, terminal = generate_experience(
-        model_params, key, flattened_features, policy, actor_params,
-        optimistic_model_params)
+        model_params, key, flattened_features, policy, actor_params)
       next_values = critic(critic_params, generated_features[:, 1:]).mean()
       lambda_values = utils.compute_lambda_values(
         next_values, reward.mean(), terminal.mean(),
