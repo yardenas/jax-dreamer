@@ -173,7 +173,8 @@ def load_config():
     if '.' in stripped:
       params_group, key = stripped.split('.')
       orig_value = defaults[params_group][key]
-      defaults[params_group][key] = type(orig_value)(remaining[idx + 1])
+      arg_type = args_type(orig_value)
+      defaults[params_group][key] = arg_type(remaining[idx + 1])
     else:
       updated_remaining.append(remaining[idx])
       updated_remaining.append(remaining[idx + 1])
