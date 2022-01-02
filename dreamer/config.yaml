@@ -29,7 +29,7 @@ defaults:
   decoder: {depth: 32, kernels: [5, 5, 6, 6]}
   reward: {output_sizes: [400, 400]}
   terminal: {output_sizes: [400, 400, 400]}
-  free_kl: 3.0
+  free_kl: 1.0
   kl_scale: 1.0
 
   # Actor-Critic
@@ -51,7 +51,7 @@ debug:
   jit: False
   time_limit: 50
   training_steps_per_epoch: 100
-  evaluation_steps_per_epoch: 100
+  evaluation_steps_per_epoch: 0
   prefill: 100
   train_every: 100
   update_steps: 2
