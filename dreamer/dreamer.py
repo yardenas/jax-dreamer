@@ -290,7 +290,7 @@ class Dreamer:
     # TODO (yarden): maybe just handwrite this first-order update rule instead?
     def loss(params: hk.Params) -> float:
       constraint, _ = self.constraint.apply(params, model_log_p)
-      return loss_scaler.scale(constraint.mean())
+      return loss_scaler.scale(-constraint.mean())
 
     (loss_, grads) = jax.value_and_grad(loss)(params)
     new_state = self.constraint.grad_step(grads, state)
