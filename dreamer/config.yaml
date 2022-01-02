@@ -22,7 +22,8 @@ defaults:
   rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 30, min_stddev: 0.05}
   rssm_posterior: {stddev: 1e-5, learnable: True}
   rssm_prior: {stddev: 0.1, learnable: False}
-  params_kl_scale: 1e-8
+  params_kl_scale: 1e-5
+  params_free_kl: 1.0
   rssm_posterior_samples: 10
   model_opt: {lr: 6e-4, eps: 1e-7, clip: 100}
   encoder: {depth: 32, kernels: [4, 4, 4, 4]}
