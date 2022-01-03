@@ -77,6 +77,7 @@ def make_agent(config, environment, logger):
 
 if __name__ == '__main__':
   config = train_utils.load_config()
+  np.random.seed(config.seed)
   if not config.jit:
     from jax.config import config as jax_config
 
