@@ -98,6 +98,7 @@ class Dreamer:
     filter_, *_ = self.model.apply
     key, subkey = jax.random.split(key)
     observation = observation.astype(self.precision.compute_dtype)
+    # TODO (yarden): should we use here the optimistic model?
     _, current_state = filter_(model_params, key, prev_state, prev_action,
                                observation)
     features = jnp.concatenate(current_state, -1)[None]
