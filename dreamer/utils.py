@@ -118,7 +118,8 @@ def initializer(name: str) -> hk.initializers.Initializer:
 
 
 @functools.partial(jax.jit, static_argnums=(3, 5))
-def evaluate_model(observations, actions, key, model, model_params, precision):
+def evaluate_model(observations, actions, key, model, model_params,
+                   optimistic_model_params, precision):
   length = min(len(observations) + 1, 50)
   observations, actions = jax.tree_map(
     lambda x: x.astype(precision.compute_dtype), (observations, actions)
@@ -135,10 +136,17 @@ def evaluate_model(observations, actions, key, model, model_params, precision):
     model_params, subkey,
     features[:, conditioning_length], None, None,
     actions=actions[None, conditioning_length:])
+  generated_optimistic, *_ = generate_sequence(
+    model_params, subkey,
+    features[:, conditioning_length], None, None,
+    actions=actions[None, conditioning_length:],
+    rssm_params=optimistic_model_params)
   key, subkey = jax.random.split(key)
   generated_decoded = decode(model_params, subkey, generated)
+  generated_optimistic_decoded = decode(model_params, subkey,
+                                        generated_optimistic)
   out = (observations[None, conditioning_length:length],
          infered_decoded.mean()[:, conditioning_length:length],
-         generated_decoded.mean())
+         generated_decoded.mean(), generated_optimistic_decoded.mean())
   out = jax.tree_map(lambda x: ((x + 0.5) * 255).astype(jnp.uint8), out)
   return out

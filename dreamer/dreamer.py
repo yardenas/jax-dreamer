@@ -98,7 +98,8 @@ class Dreamer:
     filter_, *_ = self.model.apply
     key, subkey = jax.random.split(key)
     observation = observation.astype(self.precision.compute_dtype)
-    # TODO (yarden): should we use here the optimistic model?
+    # TODO (yarden): should we use here the optimistic model? Can check
+    #  generation predictions with optimistic model.
     _, current_state = filter_(model_params, key, prev_state, prev_action,
                                observation)
     features = jnp.concatenate(current_state, -1)[None]
@@ -227,7 +228,8 @@ class Dreamer:
       # Bayesian world model while the optimistic model params is used to
       # parameterize an optimistic RSSM.
       generated_features, reward, terminal = generate_experience(
-        model_params, key, flattened_features, policy, actor_params)
+        model_params, key, flattened_features, policy, actor_params,
+      optimistic_model_params)
       next_values = critic(critic_params, generated_features[:, 1:]).mean()
       lambda_values = utils.compute_lambda_values(
         next_values, reward.mean(), terminal.mean(),
