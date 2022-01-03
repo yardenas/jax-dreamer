@@ -199,7 +199,7 @@ class Dreamer:
 
     grads, report = jax.grad(loss, has_aux=True)(params)
     new_state = self.model.grad_step(grads, state)
-    report['agent/model/grads'] = loss_scaler.scale(optax.global_norm(grads))
+    report['agent/model/grads'] = optax.global_norm(grads)
     return new_state, report, report.pop('features')
 
   def optimistic_update_actor(
@@ -255,12 +255,10 @@ class Dreamer:
                            ).entropy(seed=key).mean()
     return new_state, {
       'agent/actor/loss': actor_loss_scaler.unscale(aux[-3]),
-      'agent/actor/grads': actor_loss_scaler.scale(
-        optax.global_norm(actor_grads)),
+      'agent/actor/grads': optax.global_norm(actor_grads),
       'agent/actor/entropy': entropy,
       'agent/optimistic_model/loss': model_loss_scaler.unscale(aux[-2]),
-      'agent/optimistic_model/grads': model_loss_scaler.scale(
-        optax.global_norm(optimistic_model_grads)),
+      'agent/optimistic_model/grads': optax.global_norm(optimistic_model_grads),
       'agent/optimistic_model/log_p': aux[-4],
       'agent/constraint/lagrangian': aux[-1]
     }, aux
@@ -283,7 +281,7 @@ class Dreamer:
     new_state = self.critic.grad_step(grads, state)
     return new_state, {
       'agent/critic/loss': loss_scaler.unscale(loss_),
-      'agent/critic/grads': loss_scaler.scale(optax.global_norm(grads))
+      'agent/critic/grads': optax.global_norm(grads)
     }
 
   def update_constraint(self,
@@ -301,7 +299,7 @@ class Dreamer:
     new_state = self.constraint.grad_step(grads, state)
     return new_state, {
       'agent/constraint/loss': loss_scaler.unscale(loss_),
-      'agent/constraint/grads': loss_scaler.scale(optax.global_norm(grads))
+      'agent/constraint/grads': optax.global_norm(grads)
     }
 
   def write(self, path):
