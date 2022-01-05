@@ -21,6 +21,7 @@ class Learner:
       precision: jmp.Policy,
       *input_example: Any
   ):
+    # TODO (yarden): check if flatten of optax increases performance.
     self.optimizer = optax.chain(
       optax.clip_by_global_norm(optimizer_config['clip']),
       optax.scale_by_adam(eps=optimizer_config['eps']),
