@@ -7,6 +7,7 @@ from typing import Mapping, Tuple
 import gym
 import haiku as hk
 import jax
+import jax.nn as jnn
 import jax.numpy as jnp
 import numpy as np
 import optax
@@ -35,9 +36,7 @@ class Dreamer:
       model: hk.MultiTransformed,
       actor: hk.Transformed,
       critic: hk.Transformed,
-      optimistic_model: hk.MultiTransformed,
-      optimistic_model_params: hk.Params,
-      model_likelihood_constraint: hk.Transformed,
+      optimism_residuals: hk.Transformed,
       experience: ReplayBuffer,
       logger: TrainingLogger,
       config,
@@ -58,13 +57,13 @@ class Dreamer:
                                precision, features_example.astype(dtype))
     self.critic = utils.Learner(critic, next(self.rng_seq), config.critic_opt,
                                 precision, features_example[None].astype(dtype))
-    self.optimistic_model = utils.Learner(optimistic_model, next(self.rng_seq),
-                                          config.optimistic_model_opt,
-                                          precision,
-                                          params=optimistic_model_params)
-    self.constraint = utils.Learner(model_likelihood_constraint,
-                                    next(self.rng_seq), config.constraint_opt,
-                                    precision, 0.0)
+    *_, rssm_posterior = self.model.apply
+    rssm_params_example = rssm_posterior(self.model.params, None).mean()
+    self.optimism_residuals = utils.Learner(optimism_residuals,
+                                            next(self.rng_seq),
+                                            config.optimistic_model_opt,
+                                            precision, rssm_params_example)
+    self.lagrangian = self.c.initial_lagrangian
     self.experience = experience
     self.logger = logger
     self.state = (self.init_state, jnp.zeros(action_space.shape,
@@ -141,27 +140,29 @@ class Dreamer:
       model_state: LearningState,
       actor_state: LearningState,
       critic_state: LearningState,
-      optimistic_model_state: LearningState,
-      constraint_state: LearningState,
+      optimism_residuals_state: LearningState,
+      lagrangian: float,
       key: PRNGKey,
   ) -> Tuple[Tuple[LearningState, LearningState, LearningState,
-                   LearningState, LearningState], dict]:
+                   LearningState, float], dict]:
     _, key_model, key_actor = jax.random.split(key, 3)
     model_state, model_report, features = self.update_model(batch, model_state,
                                                             key_model)
     states, model_actor_report, aux = self.optimistic_update_actor(
-      features, actor_state, optimistic_model_state, constraint_state[0],
+      features, actor_state, optimism_residuals_state, lagrangian,
       critic_state[0], model_state[0], key_actor)
-    actor_state, optimistic_model_state = states
-    generated_features, lambda_values, model_log_ps, *_ = aux
+    actor_state, optimism_residuals_state = states
+    generated_features, lambda_values, *_, mahalanobis = aux
     critic_state, critic_report = self.update_critic(
       generated_features, critic_state, lambda_values)
-    constraint_state, constraint_report = self.update_constraint(
-      model_log_ps, constraint_state)
-    report = {**model_report, **model_actor_report, **critic_report,
-              **constraint_report}
+    new_lagrangian, constraint_report = self.update_constraint(
+      mahalanobis, lagrangian)
+    report = {
+      **model_report, **model_actor_report,
+      **critic_report, **constraint_report
+    }
     states = (model_state, actor_state, critic_state,
-              optimistic_model_state, constraint_state)
+              optimism_residuals_state, new_lagrangian)
     return states, report
 
   def update_model(
@@ -207,29 +208,33 @@ class Dreamer:
       self,
       features: jnp.ndarray,
       actor_state: LearningState,
-      optimistic_model_state: LearningState,
-      constraint_params: hk.Params,
+      optimism_residuals_state: LearningState,
+      lagrangian: float,
       critic_params: hk.Params,
       model_params: hk.Params,
       key: PRNGKey
   ) -> Tuple[Tuple[LearningState, LearningState], dict,
-             Tuple[jnp.ndarray, jnp.ndarray,
+             Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray,
                    jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     actor_params, _, actor_loss_scaler = actor_state
-    optimistic_model_params, _, model_loss_scaler = optimistic_model_state
+    optimism_residuals_params, _, model_loss_scaler = optimism_residuals_state
     _, generate_experience, *_, rssm_posterior = self.model.apply
     policy = self.actor
     critic = self.critic.apply
-    constrain = self.constraint.apply
 
-    def loss(actor_params: hk.Params, optimistic_model_params: hk.Params):
-      flattened_features = features.reshape((-1, features.shape[-1]))
+    posterior = rssm_posterior(model_params, None)
+    rssm_params = posterior.mean()
+
+    def loss(actor_params: hk.Params, optimism_residuals_params: hk.Params):
       # Generate new experience with model. Model params is used for the
       # Bayesian world model while the optimistic model params is used to
       # parameterize an optimistic RSSM.
+      optimistic_params = self.optimism_residuals.apply(
+        optimism_residuals_params, rssm_params)
+      flattened_features = features.reshape((-1, features.shape[-1]))
       generated_features, reward, terminal = generate_experience(
         model_params, key, flattened_features, policy, actor_params,
-      optimistic_model_params)
+        optimistic_params)
       next_values = critic(critic_params, generated_features[:, 1:]).mean()
       lambda_values = utils.compute_lambda_values(
         next_values, reward.mean(), terminal.mean(),
@@ -237,32 +242,33 @@ class Dreamer:
       discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
       objective = (lambda_values * discount).mean()
       actor_loss = actor_loss_scaler.scale(-objective)
-      vec_ps = utils.params_to_vec(optimistic_model_params)
-      model_log_ps = rssm_posterior(model_params, None).log_prob(vec_ps)
-      constraint, lagrangian = constrain(constraint_params, model_log_ps)
+      vec_ps = utils.params_to_vec(optimistic_params)
+      mahalanobis = jnp.square(vec_ps - posterior.mean()).dot(
+        1.0 / posterior.stddev()
+      )
+      constraint = lagrangian * (mahalanobis - self.c.mahalanobis_threshold)
       model_loss = -objective + constraint
       model_loss = model_loss_scaler.scale(model_loss.mean())
       return actor_loss + model_loss, (generated_features, lambda_values,
-                                       model_log_ps, actor_loss, model_loss,
-                                       lagrangian)
+                                       actor_loss, model_loss, constraint,
+                                       mahalanobis)
 
     grads, aux = jax.grad(loss, (0, 1), has_aux=True)(actor_params,
-                                                      optimistic_model_params)
+                                                      optimism_residuals_params)
     actor_grads, optimistic_model_grads = grads
     new_actor_state = self.actor.grad_step(actor_grads, actor_state)
-    new_model_state = self.optimistic_model.grad_step(optimistic_model_grads,
-                                                      optimistic_model_state)
+    new_model_state = self.optimism_residuals.grad_step(optimistic_model_grads,
+                                                        optimism_residuals_state)
     new_state = new_actor_state, new_model_state
     entropy = policy.apply(actor_params, features[:, 0]
                            ).entropy(seed=key).mean()
     return new_state, {
-      'agent/actor/loss': actor_loss_scaler.unscale(aux[-3]),
+      'agent/actor/loss': actor_loss_scaler.unscale(aux[-4]),
       'agent/actor/grads': optax.global_norm(actor_grads),
       'agent/actor/entropy': entropy,
-      'agent/optimistic_model/loss': model_loss_scaler.unscale(aux[-2]),
-      'agent/optimistic_model/grads': optax.global_norm(optimistic_model_grads),
-      'agent/optimistic_model/log_p': aux[-4],
-      'agent/constraint/lagrangian': aux[-1]
+      'agent/optimistic_model/loss': model_loss_scaler.unscale(aux[-3]),
+      'agent/optimistic_model/constraint': model_loss_scaler.unscale(aux[-2]),
+      'agent/optimistic_model/grads': optax.global_norm(optimistic_model_grads)
     }, aux
 
   def update_critic(
@@ -287,21 +293,14 @@ class Dreamer:
     }
 
   def update_constraint(self,
-                        model_log_p: jnp.ndarray,
-                        state: LearningState
-                        ) -> Tuple[LearningState, dict]:
-    params, opt_state, loss_scaler = state
-
-    def loss(params: hk.Params) -> float:
-      constraint, _ = self.constraint.apply(params, model_log_p)
-      return loss_scaler.scale(-constraint.mean())
-
-    # TODO (yarden): maybe just handwrite this first-order update rule instead?
-    (loss_, grads) = jax.value_and_grad(loss)(params)
-    new_state = self.constraint.grad_step(grads, state)
-    return new_state, {
-      'agent/constraint/loss': loss_scaler.unscale(loss_),
-      'agent/constraint/grads': optax.global_norm(grads)
+                        mahalanobis: jnp.ndarray,
+                        lagrangian: float
+                        ) -> Tuple[float, dict]:
+    constraint = mahalanobis - self.c.mahalanobis_threshold
+    new_lagrangian = jnn.relu(lagrangian + self.c.constraint_lr * constraint)
+    return new_lagrangian, {
+      'agent/constraint/constraint': constraint,
+      'agent/constraint/lagrangian': new_lagrangian
     }
 
   def write(self, path):
@@ -331,11 +330,11 @@ class Dreamer:
   @property
   def learning_states(self):
     return (self.model.learning_state, self.actor.learning_state,
-            self.critic.learning_state, self.optimistic_model.learning_state,
-            self.constraint.learning_state)
+            self.critic.learning_state, self.optimism_residuals.learning_state,
+            self.lagrangian)
 
   @learning_states.setter
   def learning_states(self, states):
     (self.model.learning_state, self.actor.learning_state,
-     self.critic.learning_state, self.optimistic_model.learning_state,
-     self.constraint.learning_state) = states
+     self.critic.learning_state, self.optimism_residuals.learning_state,
+     self.lagrangian) = states

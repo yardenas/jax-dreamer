@@ -92,25 +92,40 @@ class DenseDecoder(hk.Module):
     return tfd.Independent(dist(x), 0)
 
 
+class ParamsTree:
+  def __init__(self, params: hk.Params):
+    flat_ps, tree_def = jax.tree_flatten(params)
+    self.flattened_params = flat_ps
+    self.tree_def = tree_def
+
+  @functools.partial(jax.jit, static_argnums=0)
+  def unflatten(self, sample):
+    out = []
+    i = 0
+    for p in self.flattened_params:
+      n = p.size
+      out.append(sample[i:i + n].reshape(p.shape))
+      i += n
+    return jax.tree_unflatten(self.tree_def, out)
+
+
 class MeanField(hk.Module):
   def __init__(
       self,
+      name: str,
       params: hk.Params,
       stddev=1.0,
       learnable=True
   ):
-    super(MeanField, self).__init__()
-    flat_ps, tree_def = jax.tree_flatten(params)
-    self._flattened_params = flat_ps
-    self._tree_def = tree_def
+    super(MeanField, self).__init__(name)
+    self._params_tree = ParamsTree(params)
     self._stddev = stddev
     self._learnable = learnable
-    flat_params = jax.tree_map(jnp.ravel, self._flattened_params)
+    flat_params = jax.tree_map(jnp.ravel, self._params_tree.flattened_params)
     flat_params = jnp.concatenate(flat_params)
     self._flat_params = flat_params
 
   def __call__(self):
-
     if self._learnable:
       mus = hk.get_parameter(
         'mean_field_mu', (len(self._flat_params),),
@@ -131,15 +146,13 @@ class MeanField(hk.Module):
     stddevs = jnn.softplus(stddevs + init) + 1e-6
     return tfd.MultivariateNormalDiag(mus, stddevs)
 
-  @functools.partial(jax.jit, static_argnums=0)
-  def unflatten(self, sample):
-    out = []
-    i = 0
-    for p in self._flattened_params:
-      n = p.size
-      out.append(sample[i:i + n].reshape(p.shape))
-      i += n
-    return jax.tree_unflatten(self._tree_def, out)
+  def sample(self):
+    params_vec = self.__call__().sample(seed=hk.next_rng_key())
+    return self._params_tree.unflatten(params_vec)
+
+  def mean(self):
+    params_vec = self.__call__().mean()
+    return self._params_tree.unflatten(params_vec)
 
 
 # Following https://github.com/tensorflow/probability/issues/840 and

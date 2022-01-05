@@ -1,5 +1,5 @@
 import functools
-from typing import Callable, Tuple, Union, Optional
+from typing import Callable, Tuple, Union, Any
 
 import haiku as hk
 import jax.numpy as jnp
@@ -19,18 +19,14 @@ class Learner:
       seed: PRNGKey,
       optimizer_config: dict,
       precision: jmp.Policy,
-      *input_example: Union[jnp.ndarray, float],
-      params: Optional[hk.Params] = None
+      *input_example: Any
   ):
     self.optimizer = optax.chain(
       optax.clip_by_global_norm(optimizer_config['clip']),
       optax.scale_by_adam(eps=optimizer_config['eps']),
       optax.scale(-optimizer_config['lr']))
     self.model = model
-    if params is None:
-      self.params = self.model.init(seed, *input_example)
-    else:
-      self.params = params
+    self.params = self.model.init(seed, *input_example)
     self.opt_state = self.optimizer.init(self.params)
     self.loss_scaler = {
       jnp.float16: jmp.DynamicLossScale(jmp.half_dtype()(2 ** 15),
@@ -117,14 +113,14 @@ def initializer(name: str) -> hk.initializers.Initializer:
   }[name]
 
 
-@functools.partial(jax.jit, static_argnums=(3, 5))
+@functools.partial(jax.jit, static_argnums=(3, 7))
 def evaluate_model(observations, actions, key, model, model_params,
-                   optimistic_model_params, precision):
+                   optimism_residuals, optimism_residuals_params, precision):
   length = min(len(observations) + 1, 50)
   observations, actions = jax.tree_map(
     lambda x: x.astype(precision.compute_dtype), (observations, actions)
   )
-  _, generate_sequence, infer, decode, *_ = model.apply
+  _, generate_sequence, infer, decode, *_, rssm_posterior = model.apply
   key, subkey = jax.random.split(key)
   _, features, infered_decoded, *_ = infer(model_params,
                                            subkey,
@@ -133,14 +129,17 @@ def evaluate_model(observations, actions, key, model, model_params,
   conditioning_length = length // 5
   key, subkey = jax.random.split(key)
   generated, *_ = generate_sequence(
-    model_params, subkey,
-    features[:, conditioning_length], None, None,
+    model_params, subkey, features[:, conditioning_length], None, None,
     actions=actions[None, conditioning_length:])
+  rssm_posterior = rssm_posterior(model_params, None)
+  rssm_params = rssm_posterior.mean()
+  optimistic_params = optimism_residuals.apply(optimism_residuals_params,
+                                               rssm_params)
   generated_optimistic, *_ = generate_sequence(
     model_params, subkey,
     features[:, conditioning_length], None, None,
     actions=actions[None, conditioning_length:],
-    rssm_params=optimistic_model_params)
+    rssm_params=optimistic_params)
   key, subkey = jax.random.split(key)
   generated_decoded = decode(model_params, subkey, generated)
   generated_optimistic_decoded = decode(model_params, subkey,

@@ -85,7 +85,7 @@ def evaluate(agent, train_env, logger, config, steps):
       jnp.asarray(evaluation_episodes_summaries[0]['observation']),
       jnp.asarray(evaluation_episodes_summaries[0]['action']),
       next(agent.rng_seq),
-      agent.model, agent.model.params, agent.optimistic_model.params,
+      agent.model, agent.model.params, agent.optimism_residuals.params,
       get_mixed_precision_policy(config.precision)
     )
     for vid, name in zip(more_vidoes, ('gt', 'infered', 'generated',

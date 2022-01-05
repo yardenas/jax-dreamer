@@ -23,8 +23,10 @@ class BayesianWorldModel(hk.Module):
                config):
     super(BayesianWorldModel, self).__init__()
     self.rssm = rssm
-    self.rssm_posterior = b.MeanField(rssm_params, **config.rssm_posterior)
-    self.rssm_prior = b.MeanField(rssm_params, **config.rssm_prior)
+    self.rssm_posterior = b.MeanField('rssm_posterior',
+                                      rssm_params, **config.rssm_posterior)
+    self.rssm_prior = b.MeanField('rssm_prior',
+                                  rssm_params, **config.rssm_prior)
     self.encoder = b.Encoder(config.encoder['depth'],
                              tuple(config.encoder['kernels']),
                              config.initialization)
@@ -52,7 +54,7 @@ class BayesianWorldModel(hk.Module):
              State]:
     observation = jnp.squeeze(self.encoder(observation[None, None]))
     # TODO (yarden): How can we do posterior sampling here instead?
-    params = self.rssm_posterior.unflatten(self.rssm_posterior().mean())
+    params = self.rssm_posterior.mean()
     filter_, *_ = self.rssm.apply
     return filter_(params, hk.next_rng_key(), prev_state, prev_action,
                    observation)
@@ -67,7 +69,7 @@ class BayesianWorldModel(hk.Module):
   ) -> Tuple[jnp.ndarray, tfd.Normal, tfd.Bernoulli]:
     _, generate, *_ = self.rssm.apply
     if rssm_params is None:
-      rssm_params = self.rssm_posterior.unflatten(self.rssm_posterior().mean())
+      rssm_params = self.rssm_posterior.mean()
     features = generate(rssm_params, hk.next_rng_key(),
                         initial_features, actor, actor_params, actions)
     reward = self.reward(features)
@@ -85,15 +87,12 @@ class BayesianWorldModel(hk.Module):
     observations = self.encoder(observations)
     *_, infer = self.rssm.apply
 
-    def apply_infer(key):
-      sampled_params = self.rssm_posterior.unflatten(
-        self.rssm_posterior().sample(seed=key)
-      )
+    def apply_infer(_):
+      sampled_params = self.rssm_posterior.sample()
       return infer(sampled_params, hk.next_rng_key(),
                    observations, actions)
 
-    keys = hk.next_rng_keys(self._posterior_samples)
-    outs = jax.vmap(apply_infer, (0,))(keys)
+    outs = jax.vmap(apply_infer)(np.zeros((self._posterior_samples,)))
     # Average across parameter posterior samples.
     (priors, posteriors), features = jax.tree_map(lambda x: x.mean(0), outs)
 
@@ -141,18 +140,13 @@ class Actor(hk.Module):
     return b.SampleDist(dist)
 
 
-class LikelihoodConstraint(hk.Module):
-  def __init__(self, log_p_threshold, initial_lagrangian):
-    super().__init__()
-    self._log_p_threshold = log_p_threshold
-    self._initial_lagrangian = np.log(np.exp(initial_lagrangian) - 1.0)
+class ParamsResidual(hk.Module):
+  def __init__(self, params):
+    super(ParamsResidual, self).__init__()
+    self._params_tree = b.ParamsTree(params)
 
-  def __call__(self, log_p):
-    lagrangian = hk.get_parameter(
-      "lagrangian",
-      shape=[1, ],
-      dtype=jnp.float32,
-      init=hk.initializers.Constant(self._initial_lagrangian)
-    )
-    lagrangian = jnn.softplus(lagrangian)
-    return lagrangian * (self._log_p_threshold - log_p), lagrangian
+  def __call__(self, params: jnp.ndarray) -> hk.Params:
+    residuals = hk.get_parameter('residual', params.shape, params.dtype,
+                                 hk.initializers.Constant(0.))
+    updated_params = params + residuals
+    return self._params_tree.unflatten(updated_params)

@@ -84,7 +84,7 @@ def create_model(config, observation_space, action_space):
     return init, (filter_state, generate_sequence, observe_sequence,
                   decode, kl, rssm_posterior)
 
-  return hk.multi_transform(model)
+  return hk.multi_transform(model), rssm_params
 
 
 def create_actor(config, action_space):
@@ -105,15 +105,11 @@ def create_critic(config):
   return critic
 
 
-def create_optimistic_model(config, observation_space, action_space):
-  return create_rssm(config, observation_space, action_space)
-
-
-def create_constraint(config):
-  return hk.without_apply_rng(hk.transform(
-    lambda log_p:
-    models.LikelihoodConstraint(np.log(config.likelihood_threshold),
-                                config.initial_lagrangian)(log_p)))
+def create_optimism_residuals(rssm_params):
+  params_tracker = hk.without_apply_rng(hk.transform(
+    lambda ps: models.ParamsResidual(rssm_params)(ps)
+  ))
+  return params_tracker
 
 
 def make_agent(config, environment, logger):
@@ -125,17 +121,14 @@ def make_agent(config, environment, logger):
                             config.precision,
                             config.seed)
   precision_policy = get_mixed_precision_policy(config.precision)
-  optimistic_rssm, rssm_params = create_optimistic_model(
-    config, environment.observation_space, environment.action_space)
+  model, rssm_params = create_model(config, environment.observation_space,
+                                    environment.action_space)
   agent = Dreamer(environment.observation_space,
                   environment.action_space,
-                  create_model(config, environment.observation_space,
-                               environment.action_space),
+                  model,
                   create_actor(config, environment.action_space),
                   create_critic(config),
-                  optimistic_rssm,
-                  rssm_params,
-                  create_constraint(config),
+                  create_optimism_residuals(rssm_params),
                   experience, logger, config, precision_policy)
   return agent
 
