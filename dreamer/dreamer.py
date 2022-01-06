@@ -163,8 +163,7 @@ class Dreamer:
        posterior), features, decoded, reward, terminal = outputs_infer
       kl = jnp.maximum(tfd.kl_divergence(posterior, prior).mean(),
                        self.c.free_kl)
-      log_p_obs = decoded.log_prob(batch['observation'].astype(
-        jnp.float32)).mean()
+      log_p_obs = decoded.log_prob(batch['observation']).mean()
       log_p_rews = reward.log_prob(batch['reward']).mean()
       log_p_terms = terminal.log_prob(batch['terminal']).mean()
       loss_ = self.c.kl_scale * kl - log_p_obs - log_p_rews - log_p_terms
@@ -231,7 +230,7 @@ class Dreamer:
       values = self.critic.apply(params, features[:, :-1])
       targets = jax.lax.stop_gradient(lambda_values)
       discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
-      return -values.log_prob(targets * discount).mean()
+      return -(values.log_prob(targets) * discount).mean()
 
     (loss_, grads) = jax.value_and_grad(loss)(params)
     new_state = self.critic.grad_step(grads, state)
