@@ -41,7 +41,6 @@ class Dreamer:
       precision=utils.get_mixed_precision_policy(16),
       prefil_policy=None
   ):
-    super(Dreamer, self).__init__()
     self.c = config
     self.rng_seq = hk.PRNGSequence(config.seed)
     self.precision = precision
@@ -134,13 +133,14 @@ class Dreamer:
       key: PRNGKey,
   ) -> Tuple[Tuple[LearningState, LearningState, LearningState], dict]:
     key, subkey = jax.random.split(key)
-    model_state, model_report, features = self.update_model(
-      batch, model_state, subkey)
+    model_state, model_report, features = self.update_model(batch, model_state,
+                                                            subkey)
     key, subkey = jax.random.split(key)
     actor_state, actor_report, (
       generated_features, lambda_values
     ) = self.update_actor(features, actor_state, model_state[0],
-                          critic_state[0], subkey)
+                          critic_state[0],
+                          subkey)
     critic_state, critic_report = self.update_critic(
       generated_features, critic_state, lambda_values)
     report = {**model_report, **actor_report, **critic_report}
@@ -195,9 +195,9 @@ class Dreamer:
     _, generate_experience, *_ = self.model.apply
     policy = self.actor
     critic = self.critic.apply
+    flattened_features = features.reshape((-1, features.shape[-1]))
 
     def loss(params: hk.Params):
-      flattened_features = features.reshape((-1, features.shape[-1]))
       generated_features, reward, terminal = generate_experience(
         model_params, key, flattened_features, policy, params)
       next_values = critic(critic_params, generated_features[:, 1:]).mean()
