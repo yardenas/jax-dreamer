@@ -283,7 +283,7 @@ class Dreamer:
       values = self.critic.apply(params, features[:, :-1])
       targets = jax.lax.stop_gradient(lambda_values)
       discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
-      return loss_scaler.scale(-values.log_prob(targets * discount).mean())
+      return loss_scaler.scale(-(values.log_prob(targets) * discount).mean())
 
     (loss_, grads) = jax.value_and_grad(loss)(params)
     new_state = self.critic.grad_step(grads, state)
