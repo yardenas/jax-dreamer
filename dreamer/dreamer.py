@@ -132,7 +132,7 @@ class Dreamer:
       actor_state: LearningState,
       critic_state: LearningState,
       key: PRNGKey,
-  ) -> Tuple[LearningState, LearningState, LearningState, dict]:
+  ) -> Tuple[Tuple[LearningState, LearningState, LearningState], dict]:
     key, subkey = jax.random.split(key)
     model_state, model_report, features = self.update_model(
       batch, model_state, subkey)
@@ -144,7 +144,7 @@ class Dreamer:
     critic_state, critic_report = self.update_critic(
       generated_features, critic_state, lambda_values)
     report = {**model_report, **actor_report, **critic_report}
-    return model_state, actor_state, critic_state, report
+    return (model_state, actor_state, critic_state), report
 
   def update_model(
       self,
@@ -152,7 +152,7 @@ class Dreamer:
       state: LearningState,
       key: PRNGKey
   ) -> Tuple[LearningState, dict, jnp.ndarray]:
-    params, opt_state, loss_scaler = state
+    params, opt_state = state
 
     def loss(params: hk.Params) -> Tuple[float, dict]:
       _, _, infer, _ = self.model.apply
@@ -168,7 +168,7 @@ class Dreamer:
       log_p_rews = reward.log_prob(batch['reward']).mean()
       log_p_terms = terminal.log_prob(batch['terminal']).mean()
       loss_ = self.c.kl_scale * kl - log_p_obs - log_p_rews - log_p_terms
-      return loss_scaler.scale(loss_), {
+      return loss_, {
         'agent/model/kl': kl,
         'agent/model/post_entropy': posterior.entropy().mean(),
         'agent/model/prior_entropy': prior.entropy().mean(),
@@ -180,7 +180,7 @@ class Dreamer:
 
     grads, report = jax.grad(loss, has_aux=True)(params)
     new_state = self.model.grad_step(grads, state)
-    report['agent/model/grads'] = loss_scaler.scale(optax.global_norm(grads))
+    report['agent/model/grads'] = optax.global_norm(grads)
     return new_state, report, report.pop('features')
 
   def update_actor(
@@ -191,7 +191,7 @@ class Dreamer:
       critic_params: hk.Params,
       key: PRNGKey
   ) -> Tuple[LearningState, dict, Tuple[jnp.ndarray, jnp.ndarray]]:
-    params, opt_state, loss_scaler = state
+    params, opt_state = state
     _, generate_experience, *_ = self.model.apply
     policy = self.actor
     critic = self.critic.apply
@@ -200,23 +200,22 @@ class Dreamer:
       flattened_features = features.reshape((-1, features.shape[-1]))
       generated_features, reward, terminal = generate_experience(
         model_params, key, flattened_features, policy, params)
-      next_values = critic(critic_params,
-                           generated_features[:, 1:]).mean()
+      next_values = critic(critic_params, generated_features[:, 1:]).mean()
       lambda_values = utils.compute_lambda_values(next_values,
                                                   reward.mean(),
                                                   terminal.mean(),
                                                   self.c.discount,
                                                   self.c.lambda_)
       discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
-      loss_ = loss_scaler.scale((-lambda_values * discount).mean())
+      loss_ = (-lambda_values * discount).mean()
       return loss_, (generated_features, lambda_values)
 
     (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(params)
     new_state = self.actor.grad_step(grads, state)
     entropy = policy.apply(params, features[:, 0]).entropy(seed=key).mean()
     return new_state, {
-      'agent/actor/loss': loss_scaler.unscale(loss_),
-      'agent/actor/grads': loss_scaler.scale(optax.global_norm(grads)),
+      'agent/actor/loss': loss_,
+      'agent/actor/grads': optax.global_norm(grads),
       'agent/actor/entropy': entropy
     }, aux
 
@@ -226,19 +225,19 @@ class Dreamer:
       state: LearningState,
       lambda_values: jnp.ndarray
   ) -> Tuple[LearningState, dict]:
-    params, opt_state, loss_scaler = state
+    params, opt_state = state
 
     def loss(params: hk.Params) -> float:
       values = self.critic.apply(params, features[:, :-1])
       targets = jax.lax.stop_gradient(lambda_values)
       discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
-      return loss_scaler.scale(-values.log_prob(targets * discount).mean())
+      return -values.log_prob(targets * discount).mean()
 
     (loss_, grads) = jax.value_and_grad(loss)(params)
     new_state = self.critic.grad_step(grads, state)
     return new_state, {
-      'agent/critic/loss': loss_scaler.unscale(loss_),
-      'agent/critic/grads': loss_scaler.scale(optax.global_norm(grads))
+      'agent/critic/loss': loss_,
+      'agent/critic/grads': optax.global_norm(grads)
     }
 
   def write(self, path):
@@ -268,11 +267,9 @@ class Dreamer:
   @property
   def learning_states(self):
     return (self.model.learning_state, self.actor.learning_state,
-            self.critic.learning_state, self.optimism_residuals.learning_state,
-            self.lagrangian)
+            self.critic.learning_state)
 
   @learning_states.setter
   def learning_states(self, states):
     (self.model.learning_state, self.actor.learning_state,
-     self.critic.learning_state, self.optimism_residuals.learning_state,
-     self.lagrangian) = states
+     self.critic.learning_state) = states

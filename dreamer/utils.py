@@ -9,7 +9,7 @@ import numpy as np
 import optax
 
 PRNGKey = jnp.ndarray
-LearningState = Tuple[hk.Params, optax.OptState, jmp.LossScale]
+LearningState = Tuple[hk.Params, optax.OptState]
 
 
 class Learner:
@@ -28,11 +28,6 @@ class Learner:
     self.model = model
     self.params = self.model.init(seed, *input_example)
     self.opt_state = self.optimizer.init(self.params)
-    self.loss_scaler = {
-      jnp.float16: jmp.DynamicLossScale(jmp.half_dtype()(2 ** 15),
-                                        period=5000),
-      jnp.float32: jmp.NoOpLossScale()
-    }[precision.compute_dtype]
     self.precision = precision
 
   @property
@@ -41,26 +36,23 @@ class Learner:
 
   @property
   def learning_state(self):
-    return self.params, self.opt_state, self.loss_scaler
+    return self.params, self.opt_state
 
   @learning_state.setter
   def learning_state(self, state):
     self.params = state[0]
     self.opt_state = state[1]
-    self.loss_scaler = state[2]
 
   def grad_step(self, grads, state: LearningState):
-    params, opt_state, loss_scaler = state
-    unscaled_grads = loss_scaler.unscale(grads)
-    unscaled_grads = self.precision.cast_to_param(unscaled_grads)
+    params, opt_state = state
+    unscaled_grads = self.precision.cast_to_param(grads)
     updates, new_opt_state = self.optimizer.update(unscaled_grads, opt_state)
     new_params = optax.apply_updates(params, updates)
     grads_finite = jmp.all_finite(unscaled_grads)
-    loss_scaler = loss_scaler.adjust(grads_finite)
     new_params, new_opt_state = jmp.select_tree(grads_finite,
                                                 (new_params, new_opt_state),
                                                 (params, opt_state))
-    return new_params, new_opt_state, loss_scaler
+    return new_params, new_opt_state
 
 
 def compute_lambda_values(
