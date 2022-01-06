@@ -116,13 +116,9 @@ class Dreamer:
     reports = defaultdict(float)
     for batch in tqdm(self.experience.sample(self.c.update_steps),
                       leave=False, total=self.c.update_steps):
-      (self.model.learning_state,
-       self.actor.learning_state,
-       self.critic.learning_state,
-       report) = self._update(dict(batch), self.model.learning_state,
-                              self.actor.learning_state,
-                              self.critic.learning_state,
-                              next(self.rng_seq))
+      self.learning_states, report = self._update(dict(batch),
+                                                  *self.learning_states,
+                                                  key=next(self.rng_seq))
       # Average training metrics across update steps.
       for k, v in report.items():
         reports[k] += float(v) / self.c.update_steps
@@ -268,3 +264,15 @@ class Dreamer:
   def time_to_update(self):
     return self.training_step > self.c.prefill and \
            self.training_step % self.c.train_every == 0
+
+  @property
+  def learning_states(self):
+    return (self.model.learning_state, self.actor.learning_state,
+            self.critic.learning_state, self.optimism_residuals.learning_state,
+            self.lagrangian)
+
+  @learning_states.setter
+  def learning_states(self, states):
+    (self.model.learning_state, self.actor.learning_state,
+     self.critic.learning_state, self.optimism_residuals.learning_state,
+     self.lagrangian) = states
