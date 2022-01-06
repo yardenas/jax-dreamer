@@ -163,7 +163,8 @@ class Dreamer:
        posterior), features, decoded, reward, terminal = outputs_infer
       kl = jnp.maximum(tfd.kl_divergence(posterior, prior).mean(),
                        self.c.free_kl)
-      log_p_obs = decoded.log_prob(batch['observation']).mean()
+      observation_f32 = batch['observation'].astype(jnp.float32)
+      log_p_obs = decoded.log_prob(observation_f32).mean()
       log_p_rews = reward.log_prob(batch['reward']).mean()
       log_p_terms = terminal.log_prob(batch['terminal']).mean()
       loss_ = self.c.kl_scale * kl - log_p_obs - log_p_rews - log_p_terms
