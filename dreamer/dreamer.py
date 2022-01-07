@@ -230,7 +230,7 @@ class Dreamer:
       # Bayesian world model while the optimistic model params is used to
       # parameterize an optimistic RSSM.
       optimistic_params = self.optimism_residuals.apply(
-        optimism_residuals_params, rssm_params)
+        optimism_residuals_params, rssm_params) if self.c.optimism else None
       generated_features, reward, terminal = generate_experience(
         model_params, key, flattened_features, policy, actor_params,
         optimistic_params)
@@ -241,7 +241,9 @@ class Dreamer:
       discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
       objective = (lambda_values * discount).mean()
       actor_loss = -objective
-      vec_ps = utils.params_to_vec(optimistic_params)
+      vec_ps = (utils.params_to_vec(optimistic_params)
+                if self.c.optimism
+                else posterior.mean())
       mahalanobis = jnp.square(vec_ps - posterior.mean()).dot(
         1.0 / posterior.stddev()
       )
