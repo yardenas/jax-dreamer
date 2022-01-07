@@ -50,12 +50,10 @@ class Dreamer:
       observation_space.sample()[None, None].astype(dtype),
       action_space.sample()[None, None].astype(dtype))
     features_example = jnp.concatenate(self.init_state, -1)[None]
-    self.actor = utils.Learner(actor, next(self.rng_seq),
-                               config.actor_opt, precision,
-                               features_example.astype(dtype))
-    self.critic = utils.Learner(
-      critic, next(self.rng_seq), config.critic_opt, precision,
-      features_example[None].astype(dtype))
+    self.actor = utils.Learner(actor, next(self.rng_seq), config.actor_opt,
+                               precision, features_example.astype(dtype))
+    self.critic = utils.Learner(critic, next(self.rng_seq), config.critic_opt,
+                                precision, features_example[None].astype(dtype))
     self.experience = experience
     self.logger = logger
     self.state = (self.init_state, jnp.zeros(action_space.shape,
