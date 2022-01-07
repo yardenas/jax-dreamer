@@ -9,7 +9,7 @@ import numpy as np
 import optax
 
 PRNGKey = jnp.ndarray
-LearningState = Tuple[hk.Params, optax.OptState, jmp.LossScale]
+LearningState = Tuple[hk.Params, optax.OptState]
 
 
 class Learner:
@@ -29,11 +29,6 @@ class Learner:
     self.model = model
     self.params = self.model.init(seed, *input_example)
     self.opt_state = self.optimizer.init(self.params)
-    self.loss_scaler = {
-      jnp.float16: jmp.DynamicLossScale(jmp.half_dtype()(2 ** 15),
-                                        period=5000),
-      jnp.float32: jmp.NoOpLossScale()
-    }[precision.compute_dtype]
     self.precision = precision
 
   @property
@@ -42,13 +37,12 @@ class Learner:
 
   @property
   def learning_state(self):
-    return self.params, self.opt_state, self.loss_scaler
+    return self.params, self.opt_state
 
   @learning_state.setter
   def learning_state(self, state):
     self.params = state[0]
     self.opt_state = state[1]
-    self.loss_scaler = state[2]
 
   def grad_step(self, grads, state: LearningState):
     params, opt_state, loss_scaler = state

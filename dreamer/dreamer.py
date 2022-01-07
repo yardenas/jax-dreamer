@@ -43,7 +43,6 @@ class Dreamer:
       precision=utils.get_mixed_precision_policy(16),
       prefil_policy=None
   ):
-    super(Dreamer, self).__init__()
     self.c = config
     self.rng_seq = hk.PRNGSequence(config.seed)
     self.precision = precision
@@ -171,7 +170,7 @@ class Dreamer:
       state: LearningState,
       key: PRNGKey
   ) -> Tuple[LearningState, dict, jnp.ndarray]:
-    params, _, loss_scaler = state
+    params, _ = state
     _, _, infer, _, params_kl, _ = self.model.apply
 
     def loss(params: hk.Params) -> Tuple[float, dict]:
@@ -188,7 +187,7 @@ class Dreamer:
       log_p_terms = terminal.log_prob(batch['terminal']).mean()
       loss_ = (params_kl_ + self.c.kl_scale * kl -
                log_p_obs - log_p_rews - log_p_terms)
-      return loss_scaler.scale(loss_), {
+      return loss_, {
         'agent/model/kl': kl,
         'agent/model/params_kl': params_kl_,
         'agent/model/post_entropy': posterior.entropy().mean(),
@@ -216,8 +215,8 @@ class Dreamer:
   ) -> Tuple[Tuple[LearningState, LearningState], dict,
              Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray,
                    jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
-    actor_params, _, actor_loss_scaler = actor_state
-    optimism_residuals_params, _, model_loss_scaler = optimism_residuals_state
+    actor_params, _ = actor_state
+    optimism_residuals_params, _ = optimism_residuals_state
     _, generate_experience, *_, rssm_posterior = self.model.apply
     policy = self.actor
     critic = self.critic.apply
@@ -241,14 +240,14 @@ class Dreamer:
         self.c.discount, self.c.lambda_)
       discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
       objective = (lambda_values * discount).mean()
-      actor_loss = actor_loss_scaler.scale(-objective)
+      actor_loss = -objective
       vec_ps = utils.params_to_vec(optimistic_params)
       mahalanobis = jnp.square(vec_ps - posterior.mean()).dot(
         1.0 / posterior.stddev()
       )
       constraint = lagrangian * (mahalanobis - self.c.mahalanobis_threshold)
       model_loss = -objective + constraint
-      model_loss = model_loss_scaler.scale(model_loss.mean())
+      model_loss = model_loss.mean()
       return actor_loss + model_loss, (generated_features, lambda_values,
                                        actor_loss, model_loss, constraint,
                                        mahalanobis)
@@ -263,11 +262,11 @@ class Dreamer:
     entropy = policy.apply(actor_params, features[:, 0]
                            ).entropy(seed=key).mean()
     return new_state, {
-      'agent/actor/loss': actor_loss_scaler.unscale(aux[-4]),
+      'agent/actor/loss': aux[-4],
       'agent/actor/grads': optax.global_norm(actor_grads),
       'agent/actor/entropy': entropy,
-      'agent/optimistic_model/loss': model_loss_scaler.unscale(aux[-3]),
-      'agent/optimistic_model/constraint': model_loss_scaler.unscale(aux[-2]),
+      'agent/optimistic_model/loss': aux[-3],
+      'agent/optimistic_model/constraint': aux[-2],
       'agent/optimistic_model/grads': optax.global_norm(optimistic_model_grads)
     }, aux
 
@@ -277,18 +276,18 @@ class Dreamer:
       state: LearningState,
       lambda_values: jnp.ndarray
   ) -> Tuple[LearningState, dict]:
-    params, opt_state, loss_scaler = state
+    params, opt_state = state
 
     def loss(params: hk.Params) -> float:
       values = self.critic.apply(params, features[:, :-1])
       targets = jax.lax.stop_gradient(lambda_values)
       discount = utils.discount(self.c.discount, self.c.imag_horizon - 1)
-      return loss_scaler.scale(-(values.log_prob(targets) * discount).mean())
+      return -(values.log_prob(targets) * discount).mean()
 
     (loss_, grads) = jax.value_and_grad(loss)(params)
     new_state = self.critic.grad_step(grads, state)
     return new_state, {
-      'agent/critic/loss': loss_scaler.unscale(loss_),
+      'agent/critic/loss': loss_,
       'agent/critic/grads': optax.global_norm(grads)
     }
 
