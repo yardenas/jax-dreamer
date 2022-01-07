@@ -1,9 +1,6 @@
-import functools
-import os
-import pickle
 from collections import defaultdict
-from typing import Mapping, Tuple
 
+import functools
 import gym
 import haiku as hk
 import jax
@@ -11,8 +8,11 @@ import jax.nn as jnn
 import jax.numpy as jnp
 import numpy as np
 import optax
+import os
+import pickle
 from tensorflow_probability.substrates import jax as tfp
 from tqdm import tqdm
+from typing import Mapping, Tuple
 
 import dreamer.utils as utils
 from dreamer.logger import TrainingLogger
@@ -223,6 +223,7 @@ class Dreamer:
 
     posterior = rssm_posterior(model_params, None)
     rssm_params = posterior.mean()
+    flattened_features = features.reshape((-1, features.shape[-1]))
 
     def loss(actor_params: hk.Params, optimism_residuals_params: hk.Params):
       # Generate new experience with model. Model params is used for the
@@ -230,7 +231,6 @@ class Dreamer:
       # parameterize an optimistic RSSM.
       optimistic_params = self.optimism_residuals.apply(
         optimism_residuals_params, rssm_params)
-      flattened_features = features.reshape((-1, features.shape[-1]))
       generated_features, reward, terminal = generate_experience(
         model_params, key, flattened_features, policy, actor_params,
         optimistic_params)
@@ -256,8 +256,8 @@ class Dreamer:
                                                       optimism_residuals_params)
     actor_grads, optimistic_model_grads = grads
     new_actor_state = self.actor.grad_step(actor_grads, actor_state)
-    new_model_state = self.optimism_residuals.grad_step(optimistic_model_grads,
-                                                        optimism_residuals_state)
+    new_model_state = self.optimism_residuals.grad_step(
+      optimistic_model_grads, optimism_residuals_state)
     new_state = new_actor_state, new_model_state
     entropy = policy.apply(actor_params, features[:, 0]
                            ).entropy(seed=key).mean()
@@ -266,7 +266,7 @@ class Dreamer:
       'agent/actor/grads': optax.global_norm(actor_grads),
       'agent/actor/entropy': entropy,
       'agent/optimistic_model/loss': aux[-3],
-      'agent/optimistic_model/constraint': aux[-2],
+      'agent/optimistic_model/penalty': aux[-2],
       'agent/optimistic_model/grads': optax.global_norm(optimistic_model_grads)
     }, aux
 
