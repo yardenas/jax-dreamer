@@ -45,17 +45,15 @@ class Learner:
     self.opt_state = state[1]
 
   def grad_step(self, grads, state: LearningState):
-    params, opt_state, loss_scaler = state
-    unscaled_grads = loss_scaler.unscale(grads)
-    unscaled_grads = self.precision.cast_to_param(unscaled_grads)
-    updates, new_opt_state = self.optimizer.update(unscaled_grads, opt_state)
+    params, opt_state = state
+    grads = self.precision.cast_to_param(grads)
+    updates, new_opt_state = self.optimizer.update(grads, opt_state)
     new_params = optax.apply_updates(params, updates)
-    grads_finite = jmp.all_finite(unscaled_grads)
-    loss_scaler = loss_scaler.adjust(grads_finite)
+    grads_finite = jmp.all_finite(grads)
     new_params, new_opt_state = jmp.select_tree(grads_finite,
                                                 (new_params, new_opt_state),
                                                 (params, opt_state))
-    return new_params, new_opt_state, loss_scaler
+    return new_params, new_opt_state
 
 
 def compute_lambda_values(
