@@ -19,7 +19,7 @@ defaults:
   initialization: glorot
 
   # World Model
-  rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 30, min_stddev: 0.05}
+  rssm: {hidden: 200, deterministic_size: 200, stochastic_size: 30, min_stddev: 0.1}
   rssm_posterior: {stddev: 1e-5, learnable: True}
   rssm_prior: {stddev: 0.1, learnable: True}
   params_kl_scale: 1e-8
@@ -30,7 +30,7 @@ defaults:
   decoder: {depth: 32, kernels: [5, 5, 6, 6]}
   reward: {output_sizes: [400, 400]}
   terminal: {output_sizes: [400, 400, 400]}
-  free_kl: 1.0
+  free_kl: 3.0
   kl_scale: 1.0
 
   # Actor-Critic
