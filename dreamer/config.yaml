@@ -44,7 +44,7 @@ defaults:
 
   # Optimism
   optimism: True
-  optimistic_model_opt: {lr: 6e-4, eps: 1e-7, clip: 100}
+  optimistic_model_opt: {lr: 8e-5, eps: 1e-7, clip: 100}
   constraint_lr: 3e-4
   mahalanobis_threshold: 0.1
   initial_lagrangian: 100
@@ -53,7 +53,7 @@ debug:
   jit: False
   time_limit: 50
   training_steps_per_epoch: 100
-  evaluation_steps_per_epoch: 0
+  evaluation_steps_per_epoch: 50
   prefill: 100
   train_every: 100
   update_steps: 2

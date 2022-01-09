@@ -106,7 +106,7 @@ def initializer(name: str) -> hk.initializers.Initializer:
   }[name]
 
 
-@functools.partial(jax.jit, static_argnums=(3, 7))
+@functools.partial(jax.jit, static_argnums=(3, 5, 7))
 def evaluate_model(observations, actions, key, model, model_params,
                    optimism_residuals, optimism_residuals_params, precision):
   length = min(len(observations) + 1, 50)
