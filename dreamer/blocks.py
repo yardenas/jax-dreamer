@@ -100,7 +100,7 @@ class StableTanhBijector(tfb.Tanh):
   def _inverse(self, y):
     dtype = y.dtype
     y = y.astype(jnp.float32)
-    y = jnp.clip(y, -0.99999997, -0.99999997)
+    y = jnp.clip(y, -0.99999997, 0.99999997)
     y = jnp.arctanh(y)
     return y.astype(dtype)
 
