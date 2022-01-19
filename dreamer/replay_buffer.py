@@ -23,7 +23,6 @@ class ReplayBuffer:
       precision: int,
       seed: int
   ):
-    super(ReplayBuffer, self).__init__()
     dtype = {16: tf.float16, 32: tf.float32}[precision]
     self._sequence_length = length
     data_spec = {
